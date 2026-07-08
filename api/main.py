@@ -1,6 +1,5 @@
 from fastapi import FastAPI, HTTPException, Body
 from fastapi.middleware.cors import CORSMiddleware
-from datetime import datetime, timedelta
 from db import SessionLocal, Standing, Match
 from engine.pipeline import run_fixture
 from api.hydrate import hydrate_fixture
@@ -22,14 +21,13 @@ def health():
     return {"ok": True}
 
 @app.get("/fixtures")
-def fixtures(league: str, days: int = 7):
+def fixtures(league: str):
     with SessionLocal() as s:
-        cutoff = datetime.utcnow() - timedelta(days=days)
         rows = (
             s.query(Match)
-            .filter(Match.league == league, Match.date >= cutoff)
-            .order_by(Match.date.asc())
-            .limit(40)
+            .filter(Match.league == league)
+            .order_by(Match.date.desc())
+            .limit(7)
             .all()
         )
         return [{"home": m.home_team, "away": m.away_team, "date": str(m.date)} for m in rows]
