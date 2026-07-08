@@ -33,9 +33,10 @@ export default function Home() {
     setLoading(true); setErr(""); setRes(null);
     try {
       setRes(await analyze({
-        league, home, away,
-        home: { gk_status: homeGk }, away: { gk_status: awayGk },
-        overrides: { rivalry },
+        league,
+        home: homeGk !== "first_choice_avg" ? { gk_status: homeGk } : undefined,
+        away: awayGk !== "first_choice_avg" ? { gk_status: awayGk } : undefined,
+        overrides: { rivalry, home, away },
       }));
     } catch (e: any) { setErr(e.message ?? "failed"); }
     finally { setLoading(false); }
