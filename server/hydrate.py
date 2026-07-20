@@ -31,7 +31,7 @@ def _matches_for(session, team_id, season, limit=10):
             ctx = opponent_form_as_of(opp.team_id, m.date, last_n=5)
         out.append({"venue": m.venue,
                     "goals": float(m.gf) if m.gf is not None else 0.0,
-                    "xg_for": m.xg_for if m.xg_for is not None else float(m.gf or 0),
+                    "xg_for": m.xg_for,  # keep None if missing — engine handles it
                     "result": (m.result or "D")[:1], "ppda": m.ppda,
                     "opp_form_points": _opp_form_points(ctx["form"]),
                     "opp_xga_trend": ctx["xga_trend"] or 1.4})
@@ -89,7 +89,11 @@ def hydrate_fixture(league, season, home_name, away_name, meta_overrides=None):
         home = team(home_name, home_id)
         away = team(away_name, away_id)
         sample = min(len(home["matches"]), len(away["matches"]))
-        dists = {"xgdev": {"mean": 0.0, "std": 0.5}, "form": {"mean": 0.0, "std": 0.5},
+        def _read_dist(field, fallback):
+            d = get_distribution(league, season, field)
+            return {"mean": d["mean"], "std": d["std"]} if d and d["mean"] is not None else fallback
+        dists = {"xgdev": _read_dist("xgdev", {"mean": 0.0, "std": 0.5}),
+                 "form": _read_dist("form", {"mean": 0.0, "std": 0.5}),
                  "ppda": _ppda_dist(s, season)}
         league_avg = _league_avg_xga(s, league, season)
         odds = odds_for_fixture(league, home_name, away_name)

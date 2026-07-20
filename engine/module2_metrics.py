@@ -13,7 +13,7 @@ def _weighted(values):
 
 
 def weighted_xg_deviation(matches):
-    return _weighted([m["goals"] - m["xg_for"] for m in matches])
+    return _weighted([m["goals"] - m["xg_for"] for m in matches if m.get("xg_for") is not None])
 
 
 def weighted_form(matches):
