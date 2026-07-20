@@ -9,8 +9,5 @@
   ],
   "crons": [
     { "path": "/api/ingest", "schedule": "0 6 * * *" }
-  ],
-  "functions": {
-    "api/index.py": { "maxDuration": 300 }
-  }
+  ]
 }
