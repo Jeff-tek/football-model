@@ -132,38 +132,52 @@ class Manager(Base):
 class Odds(Base):
     __tablename__ = "odds"
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    understat_match_id: Mapped[str | None] = mapped_column(String)
-    market: Mapped[str] = mapped_column(String)
-    selection: Mapped[str] = mapped_column(String)
-    decimal_odds: Mapped[float] = mapped_column(Float)
-    bookmaker: Mapped[str] = mapped_column(String)
+    understat_match_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    league: Mapped[str] = mapped_column(String, nullable=False)
+    home_team: Mapped[str] = mapped_column(String, nullable=False)
+    away_team: Mapped[str] = mapped_column(String, nullable=False)
+    market: Mapped[str] = mapped_column(String, nullable=False)
+    home_price: Mapped[float | None] = mapped_column(Float, nullable=True)
+    away_price: Mapped[float | None] = mapped_column(Float, nullable=True)
     fetched_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
-    __table_args__ = (Index("ix_odds_match_market", "understat_match_id", "market"),)
+    __table_args__ = (
+        UniqueConstraint("league", "home_team", "away_team", "market",
+                         name="uq_odds_fixture_market"),
+        Index("ix_odds_match", "understat_match_id"),
+    )
 
 
 def init_db():
     Base.metadata.create_all(engine)
 
 
+def reset_odds_table():
+    """Drop and recreate the odds table (safe when empty)."""
+    Odds.__table__.drop(engine)
+    Base.metadata.create_all(engine)
+
+
 def _upsert(model, rows, index_elements, update_cols):
     if not rows:
         return
+    payloads = []
+    for r in rows:
+        payload = {c.name: r[c.name] for c in model.__table__.columns if c.name in r}
+        if "updated_at" in model.__table__.columns.keys():
+            payload.setdefault("updated_at", _now())
+        payloads.append(payload)
     with SessionLocal() as s:
-        for r in rows:
-            payload = {c.name: r[c.name] for c in model.__table__.columns if c.name in r}
-            if "updated_at" in model.__table__.columns.keys():
-                payload.setdefault("updated_at", _now())
-            stmt = pg_insert(model).values(**payload)
-            stmt = stmt.on_conflict_do_update(
-                index_elements=index_elements,
-                set_={c: getattr(stmt.excluded, c) for c in update_cols if c in payload})
-            s.execute(stmt)
+        stmt = pg_insert(model).values(payloads)
+        stmt = stmt.on_conflict_do_update(
+            index_elements=index_elements,
+            set_={c: getattr(stmt.excluded, c) for c in update_cols})
+        s.execute(stmt)
         s.commit()
 
 
 def upsert_matches(rows):
     _upsert(Match, rows, ["understat_match_id"],
-            ["home_goals", "away_goals", "home_xg", "away_xg",
+            ["season", "home_goals", "away_goals", "home_xg", "away_xg",
              "home_ppda", "away_ppda", "played", "updated_at"])
 
 

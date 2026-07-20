@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 from fastapi import FastAPI, HTTPException, Body, Header
 from fastapi.middleware.cors import CORSMiddleware
-from db import SessionLocal, Standing, Match
+from db import SessionLocal, Standing, Match, Odds
 from engine.pipeline import run_fixture
 from server.hydrate import hydrate_fixture
 import os
@@ -46,7 +46,10 @@ def ingest(league: str = "", authorization: str | None = Header(None)):
             dists = _compute_league_distributions(league, SEASON)
             for field in ("xgdev", "form"):
                 upsert_distribution(league, SEASON, field, dists[field])
-            return {"ok": True, "league": league, "teams": len(standings), "matches": len(matches)}
+            from odds.client import store_odds_for_league
+            odds_cnt = store_odds_for_league(league)
+            return {"ok": True, "league": league, "teams": len(standings),
+                    "matches": len(matches), "odds": odds_cnt}
         from ingest.run_all import run as run_ingest
         run_ingest()
         return {"ok": True, "league": "all"}
@@ -72,6 +75,16 @@ def fixtures(league: str):
         )
         return [{"home": m.home_team, "away": m.away_team, "date": str(m.date)} for m in rows]
 
+@app.get("/upcoming")
+def upcoming(league: str = ""):
+    with SessionLocal() as s:
+        q = s.query(Odds)
+        if league:
+            q = q.filter(Odds.league == league)
+        rows = q.order_by(Odds.league, Odds.home_team).limit(50).all()
+        return [{"league": r.league, "home": r.home_team, "away": r.away_team,
+                 "home_odds": r.home_price, "away_odds": r.away_price} for r in rows]
+
 @app.get("/teams")
 def teams(league: str):
     with SessionLocal() as s:
@@ -80,7 +93,10 @@ def teams(league: str):
 
 @app.post("/analyze_by_name")
 def analyze_by_name(payload: dict = Body(...)):
-    fx = hydrate_fixture(payload["league"], SEASON, payload["home"], payload["away"], payload.get("overrides"))
+    try:
+        fx = hydrate_fixture(payload["league"], SEASON, payload["home"], payload["away"], payload.get("overrides"))
+    except ValueError as e:
+        return {"stop": True, "verdict": "NO BET", "reason": str(e)}
     for side in ("home", "away"):
         gk = payload.get(f"{side}_gk")
         if gk:

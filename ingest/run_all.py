@@ -34,11 +34,12 @@ def _compute_league_distributions(league, f_season):
                 forms.append(fm)
 
     def _dist(vals):
-        if len(vals) < 2:
-            return {"mean": 0.0, "std": 0.5}
-        mean = sum(vals) / len(vals)
-        var = sum((v - mean) ** 2 for v in vals) / (len(vals) - 1)
-        return {"mean": mean, "std": var ** 0.5 if var > 0 else 0.5}
+        n = len(vals)
+        if n < 2:
+            return {"mean": 0.0, "std": 0.5, "n": n}
+        mean = sum(vals) / n
+        var = sum((v - mean) ** 2 for v in vals) / (n - 1)
+        return {"mean": mean, "std": var ** 0.5 if var > 0 else 0.5, "n": n}
 
     return {"xgdev": _dist(xgdevs), "form": _dist(forms)}
 
@@ -65,7 +66,10 @@ def run():
     upsert_injuries(fpl.fetch_pl_injuries(), replace_source="fpl")
     print("Managers:")
     upsert_managers(managers.fetch_all_managers())
-    print("Ingest complete (Understat + Transfermarkt managers + league dists).")
+    print("Odds:")
+    from odds.client import fetch_and_store_all_odds
+    fetch_and_store_all_odds()
+    print("Ingest complete (Understat + Wikipedia managers + league dists + odds).")
 
 
 if __name__ == "__main__":

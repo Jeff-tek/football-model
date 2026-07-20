@@ -12,6 +12,13 @@ export async function getFixtures(league: string) {
   return r.json() as Promise<{ home: string; away: string; date: string }[]>;
 }
 
+export async function getUpcoming(league: string) {
+  const q = league ? `?league=${encodeURIComponent(league)}` : "";
+  const r = await fetch(`${API}/upcoming${q}`, { cache: "no-store" });
+  if (!r.ok) return [];
+  return r.json() as Promise<{ league: string; home: string; away: string; home_odds: number; away_odds: number }[]>;
+}
+
 export type Analysis = {
   stop?: boolean; reason?: string; pick?: string; pickTeam?: string;
   verdict: string; tier?: string; sos?: string; bet?: string;

@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
-import { getTeams, getFixtures, analyze, type Analysis } from "./lib/api";
+import { getTeams, getFixtures, getUpcoming, analyze, type Analysis } from "./lib/api";
 import Slip from "./slip";
 
 const LEAGUES = ["Premier League", "La Liga", "Serie A", "Bundesliga",
@@ -24,7 +24,12 @@ export default function Home() {
 
   useEffect(() => {
     getTeams(league).then(setTeams);
-    getFixtures(league).then(setFixtures);
+    getFixtures(league).then(fxs => {
+      if (fxs.length) { setFixtures(fxs); return; }
+      getUpcoming(league).then(uxs => setFixtures(
+        uxs.map(u => ({ home: u.home, away: u.away, date: "" }))
+      ));
+    });
     setHome(""); setAway(""); setRes(null);
   }, [league]);
 
@@ -68,9 +73,9 @@ export default function Home() {
               <select onChange={e => { const f = fixtures[+e.target.value];
                 if (f) { setHome(f.home); setAway(f.away); } }}>
                 <option>Pick a scheduled match…</option>
-                {fixtures.map((f, i) => (
-                  <option key={i} value={i}>{f.home} v {f.away} — {f.date.slice(0,10)}</option>
-                ))}
+                  {fixtures.map((f, i) => (
+                    <option key={i} value={i}>{f.home} v {f.away}{f.date ? ` — ${f.date.slice(0,10)}` : ""}</option>
+                  ))}
               </select>
             </label>
           )}
