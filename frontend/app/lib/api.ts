@@ -1,4 +1,4 @@
-const API = process.env.NEXT_PUBLIC_API_URL ?? "/api";
+const API = "/api";
 
 export async function getTeams(league: string): Promise<string[]> {
   const r = await fetch(`${API}/teams?league=${encodeURIComponent(league)}`, { cache: "no-store" });
