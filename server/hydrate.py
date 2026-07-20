@@ -1,7 +1,9 @@
-from datetime import date
+from datetime import datetime, timezone
 from db import (SessionLocal, Standing, TeamMatch, Injury, Manager,
                 get_distribution, opponent_form_as_of)
 from odds.client import odds_for_fixture
+from engine.module1_gather import h2h_classify
+from scrapers.h2h_managers import derive_h2h
 
 
 def _team_id(session, league, season, team_name):
@@ -48,8 +50,10 @@ def _weeks_in_post(session, team_name):
     if not mgr or not mgr.appointed_on:
         return 99, False
     try:
-        appointed = date.fromisoformat(mgr.appointed_on[:10])
-        return (date.today() - appointed).days // 7, bool(mgr.is_caretaker)
+        appointed = datetime.fromisoformat(mgr.appointed_on[:10])
+        if appointed.tzinfo is None:
+            appointed = appointed.replace(tzinfo=timezone.utc)
+        return (datetime.now(timezone.utc) - appointed).days // 7, bool(mgr.is_caretaker)
     except ValueError:
         return 99, bool(mgr.is_caretaker)
 
@@ -90,10 +94,26 @@ def hydrate_fixture(league, season, home_name, away_name, meta_overrides=None):
         league_avg = _league_avg_xga(s, league, season)
         odds = odds_for_fixture(league, home_name, away_name)
 
+    meetings = derive_h2h(home_name, away_name)
+    home_m = [m for m in meetings if m["home_team"] == home_name]
+    away_m = [m for m in meetings if m["home_team"] == away_name]
+    def _venue_stats(mlist):
+        n = len(mlist)
+        if n == 0:
+            return 0.0, 0.0
+        wins = sum(1 for m in mlist if m["home_goals"] > m["away_goals"])
+        gd = sum(m["home_goals"] - m["away_goals"] for m in mlist)
+        return wins / n, gd / n
+    vw_h, vgd_h = _venue_stats(home_m)
+    vw_a, vgd_a = _venue_stats(away_m)
+    home_h2h = h2h_classify(meetings, home_name, vw_h, vgd_h)
+    away_h2h = h2h_classify(meetings, away_name, vw_a, vgd_a)
+
     meta = {"league": league, "season": season,
             "matchweek": home_row.matches_played or 0, "sample": sample,
             "league_avg_xga": league_avg, "neutral": False, "rivalry": False}
     if meta_overrides:
         meta.update(meta_overrides)
     return {"meta": meta, "dists": dists, "odds": odds,
-            "home_h2h": "NEUTRAL", "away_h2h": "NEUTRAL", "home": home, "away": away}
+            "home_h2h": home_h2h["signal"], "away_h2h": away_h2h["signal"],
+            "home": home, "away": away}

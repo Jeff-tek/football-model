@@ -1,8 +1,9 @@
+from datetime import datetime, timezone
 from fastapi import FastAPI, HTTPException, Body
 from fastapi.middleware.cors import CORSMiddleware
 from db import SessionLocal, Standing, Match
 from engine.pipeline import run_fixture
-from api.hydrate import hydrate_fixture
+from server.hydrate import hydrate_fixture
 import os
 
 app = FastAPI(title="Football Model API")
@@ -23,11 +24,13 @@ def health():
 @app.get("/fixtures")
 def fixtures(league: str):
     with SessionLocal() as s:
+        now = datetime.now(timezone.utc)
         rows = (
             s.query(Match)
-            .filter(Match.league == league)
-            .order_by(Match.date.desc())
-            .limit(7)
+            .filter(Match.league == league, Match.season == SEASON)
+            .filter(Match.date >= now)
+            .order_by(Match.date.asc())
+            .limit(20)
             .all()
         )
         return [{"home": m.home_team, "away": m.away_team, "date": str(m.date)} for m in rows]
@@ -41,4 +44,8 @@ def teams(league: str):
 @app.post("/analyze_by_name")
 def analyze_by_name(payload: dict = Body(...)):
     fx = hydrate_fixture(payload["league"], SEASON, payload["home"], payload["away"], payload.get("overrides"))
+    for side in ("home", "away"):
+        gk = payload.get(f"{side}_gk")
+        if gk:
+            fx[side]["gk_status"] = gk
     return run_fixture(fx)

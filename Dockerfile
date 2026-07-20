@@ -13,4 +13,4 @@ COPY . .
 RUN ls -la && python -c "import sys; print('Python path:', sys.path)"
 
 # Start the app with error logging
-CMD ["sh", "-c", "uvicorn api.main:app --host 0.0.0.0 --port 8000 --reload 2>&1 | tee /dev/stderr"]
+CMD ["sh", "-c", "uvicorn server.main:app --host 0.0.0.0 --port 8000 --reload 2>&1 | tee /dev/stderr"]

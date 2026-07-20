@@ -10,7 +10,7 @@ Backend (FastAPI + scrapers) + Postgres + Next.js frontend.
     python -m tests.test_engine        # should print all passed
     python -c "import db; db.init_db()"
     python ingest/run_all.py           # seed (slow: FBref crawl-delay)
-    uvicorn api.main:app --reload      # API at :8000
+    uvicorn server.main:app --reload      # API at :8000
 
     cd frontend
     npm install
@@ -18,5 +18,6 @@ Backend (FastAPI + scrapers) + Postgres + Next.js frontend.
     npm run dev                        # UI at :3000
 
 ## Deploy
-DB on Neon, backend+cron on Railway, frontend on Vercel (root dir = frontend).
-See the ClickUp doc "Football Model — Codebase" for the full step-by-step.
+DB on Neon, backend + frontend on Vercel. Root `vercel.json` handles both.
+Set env vars in Vercel dashboard: DATABASE_URL, ODDS_API_KEY, CURRENT_SEASON_UNDERSTAT, CURRENT_SEASON_FBREF.
+Frontend env: NEXT_PUBLIC_API_URL (leave blank to use same domain via relative path).
