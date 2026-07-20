@@ -1,7 +1,7 @@
 import os
 from db import (init_db, upsert_matches, upsert_standings, upsert_distribution,
                 upsert_team_matches, upsert_injuries, upsert_managers,
-                upsert_odds, SessionLocal)
+                SessionLocal)
 from scrapers import understat, understat_standings as ust, fpl, managers
 from engine.module2_metrics import weighted_xg_deviation, weighted_form
 
