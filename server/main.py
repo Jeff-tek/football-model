@@ -25,29 +25,33 @@ LEAGUE_SLUGS = {"EPL": "Premier League", "La_liga": "La Liga", "Serie_A": "Serie
 def ingest(league: str = "", authorization: str | None = Header(None)):
     if CRON_SECRET and authorization != f"Bearer {CRON_SECRET}":
         raise HTTPException(401, "unauthorized")
-    from ingest.run_all import run as run_ingest
-    if league:
-        slug = next((k for k, v in LEAGUE_SLUGS.items() if v == league), None)
-        if not slug:
-            raise HTTPException(400, f"unknown league: {league}")
-        from scrapers import understat
-        from db import upsert_matches, upsert_standings, upsert_team_matches, upsert_distribution
-        raw = understat.fetch_league_matches(slug, os.environ.get("CURRENT_SEASON_UNDERSTAT", "2025"))
-        matches = [{**m, "season": SEASON} for m in raw]
-        upsert_matches(matches)
-        from scrapers import understat_standings as ust
-        standings = ust.build_standings(matches, league, SEASON)
-        upsert_standings(standings)
-        upsert_team_matches(ust.build_team_matches(matches, league, SEASON))
-        for field in ("xga_per_game", "xg_for", "xg_against"):
-            upsert_distribution(league, SEASON, field, ust.league_distribution(standings, field))
-        from ingest.run_all import _compute_league_distributions
-        dists = _compute_league_distributions(league, SEASON)
-        for field in ("xgdev", "form"):
-            upsert_distribution(league, SEASON, field, dists[field])
-        return {"ok": True, "league": league, "teams": len(standings), "matches": len(matches)}
-    run_ingest()
-    return {"ok": True, "league": "all"}
+    import traceback
+    try:
+        if league:
+            slug = next((k for k, v in LEAGUE_SLUGS.items() if v == league), None)
+            if not slug:
+                raise HTTPException(400, f"unknown league: {league}")
+            from scrapers import understat
+            from db import upsert_matches, upsert_standings, upsert_team_matches, upsert_distribution
+            raw = understat.fetch_league_matches(slug, os.environ.get("CURRENT_SEASON_UNDERSTAT", "2025"))
+            matches = [{**m, "season": SEASON} for m in raw]
+            upsert_matches(matches)
+            from scrapers import understat_standings as ust
+            standings = ust.build_standings(matches, league, SEASON)
+            upsert_standings(standings)
+            upsert_team_matches(ust.build_team_matches(matches, league, SEASON))
+            for field in ("xga_per_game", "xg_for", "xg_against"):
+                upsert_distribution(league, SEASON, field, ust.league_distribution(standings, field))
+            from ingest.run_all import _compute_league_distributions
+            dists = _compute_league_distributions(league, SEASON)
+            for field in ("xgdev", "form"):
+                upsert_distribution(league, SEASON, field, dists[field])
+            return {"ok": True, "league": league, "teams": len(standings), "matches": len(matches)}
+        from ingest.run_all import run as run_ingest
+        run_ingest()
+        return {"ok": True, "league": "all"}
+    except Exception as e:
+        return {"ok": False, "error": str(e), "trace": traceback.format_exc()}
 
 
 @app.get("/health")
