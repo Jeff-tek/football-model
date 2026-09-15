@@ -10,25 +10,34 @@ const LEAGUES = ["La Liga", "Premier League", "Serie A", "Bundesliga",
 
 export default function TipsPage() {
   const [league, setLeague] = useState(LEAGUES[0]);
-  const [data, setData] = useState<TipsResponse | null>(null);
+  const [boards, setBoards] = useState<Record<string, TipsResponse>>({});
+  const [seq, setSeq] = useState(0);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
 
-  const load = useCallback(async (lg: string) => {
+  const load = useCallback(async () => {
     setLoading(true); setErr("");
-    try {
-      const tips = await getTips(lg);
-      setData(tips);
-      recordTips(lg, tips.tips);
-    } catch (e) {
-      setErr(e instanceof Error ? e.message : "failed to load tips");
-      setData(null);
-    } finally {
-      setLoading(false);
-    }
+    const results = await Promise.allSettled(LEAGUES.map((l) => getTips(l)));
+    const next: Record<string, TipsResponse> = {};
+    const failed: string[] = [];
+    results.forEach((r, i) => {
+      if (r.status === "fulfilled") {
+        next[LEAGUES[i]] = r.value;
+        recordTips(LEAGUES[i], r.value.tips);
+      } else {
+        failed.push(LEAGUES[i]);
+      }
+    });
+    setBoards(next);
+    setSeq((s) => s + 1);
+    if (failed.length > 0) setErr(`couldn't load: ${failed.join(", ")}`);
+    setLoading(false);
   }, []);
 
-  useEffect(() => { load(league); }, [league, load]);
+  useEffect(() => { load(); }, [load]);
+
+  const data = boards[league] ?? null;
+  const total = Object.values(boards).reduce((s, b) => s + b.tips.length, 0);
 
   return (
     <main className="wrap">
@@ -38,23 +47,36 @@ export default function TipsPage() {
           <h1 className="title">Today&apos;s Tips</h1>
         </div>
         <div className="tips-controls">
-          <select value={league} onChange={e => setLeague(e.target.value)} aria-label="League">
-            {LEAGUES.map(l => <option key={l}>{l}</option>)}
-          </select>
-          <button className="refresh" onClick={() => load(league)} disabled={loading}>
+          <button className="refresh" onClick={load} disabled={loading}>
             {loading ? "Loading…" : "Refresh"}
           </button>
         </div>
       </header>
 
+      <div className="league-tabs" role="tablist" aria-label="Leagues">
+        {LEAGUES.map((l) => (
+          <button
+            key={l}
+            role="tab"
+            aria-selected={l === league}
+            className={`league-tab ${l === league ? "active" : ""}`}
+            onClick={() => setLeague(l)}
+          >
+            {l}
+            <span className="tab-count">{boards[l]?.tips.length ?? "–"}</span>
+          </button>
+        ))}
+      </div>
+
       {data && (
         <p className="tips-meta">
           {data.league} · as of {fmtDate(data.as_of)} · cached {data.ttl}s · daily cron {data.cron.split(": ")[1]}
+          {total > 0 && ` · ${total} tips across leagues`}
         </p>
       )}
-      <PnLBar refreshKey={data?.as_of} />
+      <PnLBar refreshKey={String(seq)} />
 
-      {loading && <div className="empty">Pulling live scoreboard + odds…</div>}
+      {loading && <div className="empty">Pulling live scoreboards + odds…</div>}
       {err && <p className="err">{err}</p>}
       {!loading && !err && data && data.tips.length === 0 && (
         <div className="empty">No fixtures with odds right now. Try another league or refresh later.</div>
