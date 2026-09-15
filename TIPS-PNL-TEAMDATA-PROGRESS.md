@@ -17,7 +17,7 @@ Date: 2026-09-15. Delivery loop: code → push → Actions CI → Vercel. No loc
 - [x] server/main.py teamMeta — py_compile
 - [x] lib/ledger.ts + PnLBar — CI typecheck (pending CI run)
 - [x] TeamDuel + TipCard layout + page wiring + CSS — CI (pending CI run)
-- [ ] Push as Jeff-tek <75492107+Jeff-tek@users.noreply.github.com> — commit hash (AWAITING USER GO-AHEAD)
+- [x] Push as Jeff-tek <75492107+Jeff-tek@users.noreply.github.com> — commit `0985efe`, pushed `main -> main` 2026-09-15
 
 ## Changed files
 - server/main.py (teamMeta)
