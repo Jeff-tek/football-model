@@ -4,13 +4,20 @@ export type Tip = {
   home: string;
   away: string;
   date: string;
-  probs: { "1X2": [number, number, number]; "O2.5": number; BTTS: number };
+  probs: {
+    "1X2": [number, number, number];
+    DC: [number, number, number];
+    "O2.5": number;
+    "U2.5": number;
+    BTTS: number;
+  };
   fair: { "1X2": [number, number, number] };
   edge: { market: string; value: number };
   pick: string;
   verdict: "BET" | "MARGINAL" | "NO BET" | "PASS";
   reasons: string[];
   confidence: number;
+  models: string[];
   sources: { name: string; url: string }[];
   homeForm: string;
   awayForm: string;

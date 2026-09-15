@@ -21,6 +21,7 @@ export default function TipCard({ t }: { t: Tip }) {
   const edgePos = t.edge.value > 0;
   const [ph, pd, pa] = t.probs["1X2"];
   const [fh, fd, fa] = t.fair["1X2"];
+  const [dc1x, dc12, dcx2] = t.probs.DC ?? [0, 0, 0];
   return (
     <article className="tip-card">
       <div className="tip-top">
@@ -37,6 +38,9 @@ export default function TipCard({ t }: { t: Tip }) {
           <span>
             xG {t.homeXG.toFixed(2)} – {t.awayXG.toFixed(2)}
           </span>
+          {t.models && t.models.length > 1 && (
+            <span>Models: {t.models.join(" + ")}</span>
+          )}
         </div>
       </div>
       <div className={`tip-band ${vc}`}>
@@ -73,8 +77,24 @@ export default function TipCard({ t }: { t: Tip }) {
             <div className="prob-val">{pct(t.probs["O2.5"])}</div>
           </div>
           <div className="prob-cell">
+            <div className="prob-label">U2.5</div>
+            <div className="prob-val">{pct(t.probs["U2.5"] ?? 1 - t.probs["O2.5"])}</div>
+          </div>
+          <div className="prob-cell">
             <div className="prob-label">BTTS</div>
             <div className="prob-val">{pct(t.probs.BTTS)}</div>
+          </div>
+          <div className="prob-cell">
+            <div className="prob-label">1X</div>
+            <div className="prob-val">{pct(dc1x)}</div>
+          </div>
+          <div className="prob-cell">
+            <div className="prob-label">12</div>
+            <div className="prob-val">{pct(dc12)}</div>
+          </div>
+          <div className="prob-cell">
+            <div className="prob-label">X2</div>
+            <div className="prob-val">{pct(dcx2)}</div>
           </div>
           <div className="prob-cell">
             <div className="prob-label">Confidence</div>

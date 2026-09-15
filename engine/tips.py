@@ -120,28 +120,34 @@ def kelly_fraction(prob: float, odds: float, half: bool = True) -> float:
 # ── Orchestrator ─────────────────────────────────────────────
 
 KELLY_CAP = 0.02
-EDGE_BET = 0.05
-EDGE_MARGINAL = 0.0
+BET_BAND = 0.70       # pick prob ≥ this → BET
+MARGINAL_BAND = 0.55  # pick prob ≥ this → MARGINAL
+AGREE_GAP = 0.15      # max 1X2 spread across models tolerated before downgrade
 
 
-def build_tip(fixture_form: Dict, market_odds: Dict) -> Dict:
-    """Compute grounded tip from form data and bookmaker odds.
+def _norm_1x2(d):
+    """Normalize a 1X2 dict to sum 1; None when unusable."""
+    try:
+        t = d["home"] + d["draw"] + d["away"]
+    except (KeyError, TypeError):
+        return None
+    if not t or t <= 0:
+        return None
+    return {k: d[k] / t for k in ("home", "draw", "away")}
 
-    fixture_form:
-        home_goals_for: float  (last-5 avg scored at home)
-        home_goals_against: float  (last-5 avg conceded at home)
-        away_goals_for: float  (last-5 avg scored away)
-        away_goals_against: float  (last-5 avg conceded away)
-        home_last5: str  (e.g. "8-14/5" → scored-conceded/games)
-        away_last5: str
-        sample: int (games in window, default 5)
 
-    market_odds:
-        home: float  (decimal)
-        draw: float
-        away: float
+def build_tip(fixture_form: Dict, market_odds: Dict,
+              elo_1x2: Dict | None = None, openmodel_1x2: Dict | None = None) -> Dict:
+    """Compute safest pick from form data, bookmaker odds and optional 2nd opinions.
 
-    Returns dict with pick, probs, fair_odds, edge, verdict, reasons, confidence.
+    fixture_form / market_odds: as before.
+    elo_1x2 / openmodel_1x2: optional {home, draw, away} second opinions.
+
+    Method: average all available 1X2 opinions (Poisson form always votes),
+    then pick the highest-probability outcome across 1X2, Double Chance,
+    O/U 2.5 and BTTS. Verdict from probability bands; models disagreeing
+    (1X2 spread > AGREE_GAP) downgrades one band. Confidence = pick prob %.
+    Edge vs book is still reported for transparency, but no longer picks.
     """
     # Lambdas from form (clamped: λ=0 makes draw prob exactly 1 → fair() divides by zero)
     lh = max(fixture_form["home_goals_for"], 0.05)   # home expected to score
@@ -156,12 +162,47 @@ def build_tip(fixture_form: Dict, market_odds: Dict) -> Dict:
     m_ou = prob_over25(matrix)
     m_btts = prob_btts(matrix)
 
-    markets = {"1X2": m1x2, "O/U 2.5": {"over": m_ou, "under": 1.0 - m_ou},
-               "BTTS": {"yes": m_btts, "no": 1.0 - m_btts}}
+    # Ensemble 1X2 across voting models
+    votes = {"poisson": m1x2}
+    for name, opinion in (("elo", elo_1x2), ("openmodel", openmodel_1x2)):
+        n = _norm_1x2(opinion) if opinion else None
+        if n:
+            votes[name] = n
+    ens = {k: sum(v[k] for v in votes.values()) / len(votes)
+           for k in ("home", "draw", "away")}
 
-    # Pick best 1X2 edge
-    best_key, best_edge, best_fair = None, -999.0, 0.0
-    for key, prob_val in m1x2.items():
+    # Safest-pick slate
+    slate = {
+        "Home": ens["home"], "Draw": ens["draw"], "Away": ens["away"],
+        "1X": ens["home"] + ens["draw"],
+        "12": ens["home"] + ens["away"],
+        "X2": ens["draw"] + ens["away"],
+        "Over 2.5": m_ou, "Under 2.5": 1.0 - m_ou,
+        "BTTS Yes": m_btts, "BTTS No": 1.0 - m_btts,
+    }
+    pick = max(slate, key=lambda k: slate[k])
+    prob = slate[pick]
+
+    # Agreement across voting models
+    gap = max(max(v[k] for v in votes.values()) - min(v[k] for v in votes.values())
+              for k in ("home", "draw", "away"))
+    agree = gap <= AGREE_GAP
+
+    # Verdict from bands, downgraded a notch on disagreement
+    if prob >= BET_BAND:
+        verdict = "BET"
+    elif prob >= MARGINAL_BAND:
+        verdict = "MARGINAL"
+    else:
+        verdict = "NO BET"
+    if not agree and len(votes) > 1:
+        verdict = {"BET": "MARGINAL", "MARGINAL": "NO BET"}.get(verdict, verdict)
+
+    confidence = round(prob * 100, 1)
+
+    # Edge vs book (display only) on ensembled 1X2
+    best_key, best_edge = None, -999.0
+    for key, prob_val in ens.items():
         odds_val = market_odds.get(key)
         if odds_val is None:
             continue
@@ -169,58 +210,47 @@ def build_tip(fixture_form: Dict, market_odds: Dict) -> Dict:
         if ev > best_edge:
             best_edge = ev
             best_key = key
-            best_fair = fair(prob_val)
 
-    # Fair odds for all markets
-    fair_1x2 = {k: round(fair(v), 2) for k, v in m1x2.items()}
+    # Fair odds from ensembled 1X2
+    fair_1x2 = {k: round(fair(v), 2) for k, v in ens.items()}
     fair_ou = {"over": round(fair(m_ou), 2), "under": round(fair(1.0 - m_ou), 2)}
     fair_btts = {"yes": round(fair(m_btts), 2), "no": round(fair(1.0 - m_btts), 2)}
 
-    # Verdict
-    if best_key is None:
-        verdict = "NO BET"
-    elif best_edge > EDGE_BET:
-        verdict = "BET"
-    elif best_edge >= EDGE_MARGINAL:
-        verdict = "MARGINAL"
-    else:
-        verdict = "NO BET"
-
-    # Confidence
-    if sample < 5:
-        confidence = "LOW"
-    elif best_edge > 0.10:
-        confidence = "HIGH"
-    elif best_edge > 0.05:
-        confidence = "MEDIUM"
-    else:
-        confidence = "LOW"
-
-    # Kelly
+    # Kelly on best 1X2 edge (display only)
     best_odds = market_odds.get(best_key) if best_key else None
-    kf = kelly_fraction(m1x2[best_key], best_odds) if best_key and best_odds else 0.0
+    kf = kelly_fraction(ens[best_key], best_odds) if best_key and best_odds else 0.0
 
     # Reasons
     reasons: List[str] = []
     reasons.append(f"Last-5: {fixture_form.get('home_last5', '?')} (H) vs {fixture_form.get('away_last5', '?')} (A)")
     reasons.append(f"Poisson λ_home={lh:.2f} λ_away={la:.2f}, Dixon-Coles ρ={rho}")
+    for name, v in votes.items():
+        reasons.append(f"{name.capitalize()} 1X2: {v['home']:.2f}/{v['draw']:.2f}/{v['away']:.2f}")
+    reasons.append(f"Safest: {pick} ({prob:.1%}) across {len(slate)} markets")
+    reasons.append(f"Models {'agree' if agree else 'split'} (1X2 spread {gap:.2f})"
+                   + (" — verdict capped" if not agree and len(votes) > 1 else ""))
     if best_key:
-        reasons.append(f"Best edge: {best_key} (prob={m1x2[best_key]:.4f}, book={best_odds}, edge={best_edge:+.4f})")
+        reasons.append(f"Value check: {best_key} edge {best_edge:+.2%} vs book")
     reasons.append(f"Kelly (half, cap {KELLY_CAP:.0%}): {kf:.4f}")
     if sample < 10:
         reasons.append(f"Note: {sample}-game sample — variance significant; 500+ match calibration recommended")
 
     return {
-        "pick": best_key,
+        "pick": pick,
         "probs": {
-            "1X2": {k: round(v, 4) for k, v in m1x2.items()},
+            "1X2": {k: round(v, 4) for k, v in ens.items()},
+            "DC": {"1X": round(slate["1X"], 4), "12": round(slate["12"], 4),
+                   "X2": round(slate["X2"], 4)},
             "O/U 2.5": {"over": round(m_ou, 4), "under": round(1.0 - m_ou, 4)},
             "BTTS": {"yes": round(m_btts, 4), "no": round(1.0 - m_btts, 4)},
         },
+        "slate": {k: round(v, 4) for k, v in slate.items()},
         "fair_odds": {"1X2": fair_1x2, "O/U 2.5": fair_ou, "BTTS": fair_btts},
         "edge": round(best_edge, 4) if best_key else None,
+        "edge_market": best_key,
         "verdict": verdict,
         "reasons": reasons,
         "confidence": confidence,
+        "models": sorted(votes),
         "kelly": round(kf, 4),
     }

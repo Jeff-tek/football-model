@@ -183,6 +183,41 @@ def _to_dec(v):
     return round(1 + ml / 100, 3) if ml > 0 else round(1 + 100 / abs(ml), 3)
 
 
+def _display_league(league):
+    """Display name for a league key (EPL), ESPN slug (esp.1) or name already."""
+    if league in LEAGUE_SLUGS:
+        return LEAGUE_SLUGS[league]
+    for key, slug in ESPN_SLUGS.items():
+        if slug == league and key in LEAGUE_SLUGS:
+            return LEAGUE_SLUGS[key]
+    return league
+
+
+def _second_opinions(league, home_name, away_name):
+    """(elo_1x2, openmodel_1x2, tags) — any failure → Nones, never raise."""
+    try:
+        from ingest.openmodel_free import elo_lookup, prediction_lookup
+        from engine.elo import match_prob as elo_match_prob
+    except (ImportError, ModuleNotFoundError):
+        return None, None, []
+    elo_1x2, om_1x2, tags = None, None, []
+    try:
+        elos = elo_lookup(league, home_name, away_name)
+        if elos:
+            elo_1x2 = elo_match_prob(*elos)
+            tags.append("elo")
+    except Exception:
+        pass
+    try:
+        om = prediction_lookup(league, home_name, away_name)
+        if om:
+            om_1x2 = {"home": om["home"], "draw": om["draw"], "away": om["away"]}
+            tags.append("openmodel")
+    except Exception:
+        pass
+    return elo_1x2, om_1x2, tags
+
+
 def _verdict_pick(edges, p_o25, p_btts):
     """Best pick: highest positive 1X2 edge, else highest-prob market."""
     best_market, best_edge = max(edges.items(), key=lambda kv: kv[1])
@@ -210,7 +245,7 @@ def _team_avg(sched, team_name):
 
 
 def _simple_tip(hp, dp, ap):
-    """Fallback Poisson tip when engine/tips.py is unavailable."""
+    """Fallback Poisson tip when engine/tips.py is unavailable (safest-pick version)."""
     total_imp = 1 / hp + 1 / dp + 1 / ap
     p_home_fair = round((1 / hp) / total_imp, 3)
     p_draw_fair = round((1 / dp) / total_imp, 3)
@@ -219,20 +254,23 @@ def _simple_tip(hp, dp, ap):
     p_home_val, p_draw_val, p_away_val = _poisson_1x2(hxg, axg)
     p_o25 = _poisson_o25(hxg, axg)
     p_btts = _poisson_btts(hxg, axg)
+    slate = {
+        "Home": p_home_val, "Draw": p_draw_val, "Away": p_away_val,
+        "1X": round(p_home_val + p_draw_val, 3),
+        "12": round(p_home_val + p_away_val, 3),
+        "X2": round(p_draw_val + p_away_val, 3),
+        "Over 2.5": p_o25, "Under 2.5": round(1 - p_o25, 3),
+        "BTTS Yes": p_btts, "BTTS No": round(1 - p_btts, 3),
+    }
+    pick = max(slate, key=lambda k: slate[k])
+    prob = slate[pick]
+    verdict = "BET" if prob >= 0.70 else "MARGINAL" if prob >= 0.55 else "NO BET"
     edges = {
         "Home": round(p_home_val - p_home_fair, 3),
         "Draw": round(p_draw_val - p_draw_fair, 3),
         "Away": round(p_away_val - p_away_fair, 3),
     }
-    best_market, best_edge = _verdict_pick(edges, p_o25, p_btts)
-    best_prob = {"Home": p_home_val, "Draw": p_draw_val, "Away": p_away_val,
-                 "O2.5": p_o25, "BTTS Yes": p_btts}.get(best_market, 0.5)
-    if best_edge > 0.05:
-        verdict = "BET"
-    elif best_edge > 0:
-        verdict = "MARGINAL"
-    else:
-        verdict = "NO BET"
+    best_market = max(edges, key=lambda k: edges[k])
     reasons = []
     if hxg > 1.3:
         reasons.append(f"Home xG {hxg:.2f} above league average")
@@ -240,21 +278,22 @@ def _simple_tip(hp, dp, ap):
         reasons.append(f"Away xG {axg:.2f} below league average")
     if hxg - axg > 0.4:
         reasons.append(f"Significant xG gap ({hxg - axg:.2f})")
-    if best_edge > 0.05:
-        reasons.append(f"Edge detected ({best_edge:+.1%})")
+    reasons.append(f"Safest: {pick} ({prob:.0%}) — engine unavailable, Poisson-lite")
     if not reasons:
         reasons.append("Mixed signals — limited model edge")
     return {"probs": {"1X2": [p_home_val, p_draw_val, p_away_val],
-                      "O2.5": p_o25, "BTTS": p_btts},
+                      "DC": [slate["1X"], slate["12"], slate["X2"]],
+                      "O2.5": p_o25, "U2.5": slate["Under 2.5"], "BTTS": p_btts},
             "fair": {"1X2": [p_home_fair, p_draw_fair, p_away_fair]},
-            "edge": {"market": best_market, "value": best_edge},
-            "pick": best_market, "verdict": verdict,
-            "reasons": reasons, "confidence": round(best_prob * 100, 1),
+            "edge": {"market": best_market, "value": edges[best_market]},
+            "pick": pick, "verdict": verdict,
+            "reasons": reasons, "confidence": round(prob * 100, 1),
+            "models": ["poisson-lite"], "tags": [],
             "homeXG": hxg, "awayXG": axg}
 
 
-def _engine_tip(home_name, away_name, home_id, away_id, hp, dp, ap, espn_key):
-    """Compose engine/tips.build_tip with form from ESPN team schedules."""
+def _engine_tip(home_name, away_name, home_id, away_id, hp, dp, ap, espn_key, league):
+    """Compose engine/tips.build_tip with form from ESPN schedules + 2nd opinions."""
     from ingest.espn_free import fetch_team_schedule
     from engine.tips import build_tip
     hs = _cached(f"form:{home_id}", lambda: fetch_team_schedule(home_id, espn_key))
@@ -270,17 +309,23 @@ def _engine_tip(home_name, away_name, home_id, away_id, hp, dp, ap, espn_key):
             "home_last5": f"{hgf * hn:.0f}-{hga * hn:.0f}/{hn}",
             "away_last5": f"{agf * an:.0f}-{aga * an:.0f}/{an}",
             "rho": 0.02, "sample": min(hn, an)}
-    tip = build_tip(form, {"home": hp, "draw": dp, "away": ap})
+    elo_1x2, om_1x2, tags = _second_opinions(league, home_name, away_name)
+    tip = build_tip(form, {"home": hp, "draw": dp, "away": ap},
+                    elo_1x2=elo_1x2, openmodel_1x2=om_1x2)
     p = tip["probs"]
     return {"probs": {"1X2": [p["1X2"]["home"], p["1X2"]["draw"], p["1X2"]["away"]],
-                      "O2.5": p["O/U 2.5"]["over"], "BTTS": p["BTTS"]["yes"]},
+                      "DC": [p["DC"]["1X"], p["DC"]["12"], p["DC"]["X2"]],
+                      "O2.5": p["O/U 2.5"]["over"], "U2.5": p["O/U 2.5"]["under"],
+                      "BTTS": p["BTTS"]["yes"]},
             "fair": {"1X2": [1 / tip["fair_odds"]["1X2"]["home"],
                              1 / tip["fair_odds"]["1X2"]["draw"],
                              1 / tip["fair_odds"]["1X2"]["away"]]},
-            "edge": {"market": tip["pick"] or "Home", "value": tip["edge"] or 0.0},
-            "pick": tip["pick"] or "Home", "verdict": tip["verdict"],
+            "edge": {"market": tip.get("edge_market") or tip["pick"],
+                     "value": tip["edge"] if tip["edge"] is not None else 0.0},
+            "pick": tip["pick"], "verdict": tip["verdict"],
             "reasons": tip["reasons"],
-            "confidence": {"LOW": 40, "MEDIUM": 65, "HIGH": 85}.get(tip["confidence"], 50),
+            "confidence": tip["confidence"],
+            "models": tip["models"], "tags": tags,
             "homeXG": hgf, "awayXG": agf}
 
 
@@ -356,11 +401,22 @@ def tips(league: str = "La Liga"):
         # Compose engine/tips when available, else simplified Poisson
         tip = None
         try:
-            tip = _engine_tip(home_name, away_name, home_id, away_id, hp, dp, ap, espn_key)
+            tip = _engine_tip(home_name, away_name, home_id, away_id, hp, dp, ap,
+                              espn_key, _display_league(league))
         except Exception:
             tip = None
         if not tip:
             tip = _simple_tip(hp, dp, ap)
+
+        sources = [
+            {"name": "ESPN", "url": f"https://www.espn.com/soccer/scoreboard/_/league/{espn_key}"},
+            {"name": "OddsPortal", "url": "https://www.oddsportal.com/football/"},
+            {"name": "BetExplorer", "url": "https://www.betexplorer.com/football/"},
+            {"name": "ToolsGambling", "url": "https://www.toolsgambling.com/live-odds"},
+            {"name": "OddsGPT", "url": "https://www.oddsgpt.com/poisson-model"},
+        ]
+        if tip.get("tags"):
+            sources.append({"name": "The Open Model", "url": "https://theopenmodel.com"})
 
         tips_list.append({
             "home": home_name, "away": away_name,
@@ -371,13 +427,8 @@ def tips(league: str = "La Liga"):
             "pick": tip["pick"], "verdict": tip["verdict"],
             "reasons": tip["reasons"],
             "confidence": tip["confidence"],
-            "sources": [
-                {"name": "ESPN", "url": f"https://www.espn.com/soccer/scoreboard/_/league/{espn_key}"},
-                {"name": "OddsPortal", "url": "https://www.oddsportal.com/football/"},
-                {"name": "BetExplorer", "url": "https://www.betexplorer.com/football/"},
-                {"name": "ToolsGambling", "url": "https://www.toolsgambling.com/live-odds"},
-                {"name": "OddsGPT", "url": "https://www.oddsgpt.com/poisson-model"},
-            ],
+            "models": tip.get("models", []),
+            "sources": sources,
             "homeForm": home_form, "awayForm": away_form,
             "homeXG": tip["homeXG"], "awayXG": tip["awayXG"],
             "bookOdds": {"home": hp, "draw": dp, "away": ap},

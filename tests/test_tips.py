@@ -195,24 +195,31 @@ def test_build_tip_mentions_form():
     assert "8-14/5" in form_reason and "8-5/5" in form_reason
 
 
-def test_build_tip_confidence_low_sample():
+def test_build_tip_confidence_is_pick_prob():
     form = _rayo_espanyol_form()
     form["sample"] = 3
     tip = build_tip(form, {"home": 2.30, "draw": 3.40, "away": 3.10})
-    assert tip["confidence"] == "LOW"
+    assert isinstance(tip["confidence"], float)
+    assert 0 < tip["confidence"] <= 100
     assert any("variance" in r.lower() for r in tip["reasons"])
 
 
-def test_build_tip_no_odds_all_no_bet():
+def test_build_tip_no_odds_still_picks():
+    """No book odds: safest pick stands, value edge is None."""
     tip = build_tip(_rayo_espanyol_form(), {})
-    assert tip["verdict"] == "NO BET"
-    assert tip["pick"] is None
+    assert tip["verdict"] in ("BET", "MARGINAL", "NO BET")
+    assert tip["pick"] in tip["slate"]
+    assert tip["edge"] is None
 
 
-def test_build_tip_extreme_edge_is_bet():
-    """Artificially low odds to guarantee BET."""
-    tip = build_tip(_rayo_espanyol_form(), {"home": 1.01, "draw": 50.0, "away": 50.0})
+def test_build_tip_lopsided_is_bet():
+    """Dominant home form → safest pick clears the BET band."""
+    form = _rayo_espanyol_form()
+    form["home_goals_for"] = 3.2
+    form["away_goals_for"] = 0.3
+    tip = build_tip(form, {"home": 1.40, "draw": 5.00, "away": 8.00})
     assert tip["verdict"] == "BET"
+    assert tip["confidence"] >= 70.0
 
 
 def test_build_tip_kelly_in_output():
@@ -227,7 +234,31 @@ def test_build_tip_zero_lambdas_no_crash():
     form["away_goals_for"] = 0.0
     tip = build_tip(form, {"home": 2.35, "draw": 3.40, "away": 3.10})
     assert tip["verdict"] in ("BET", "MARGINAL", "NO BET")
-    assert tip["pick"] in ("home", "draw", "away")
+    assert tip["pick"] in tip["slate"]
+
+
+def test_build_tip_ensemble_averages():
+    """Agreeing Elo vote joins models and moves the ensembled 1X2."""
+    base = build_tip(_rayo_espanyol_form(), {"home": 2.30, "draw": 3.40, "away": 3.10})
+    elo = {"home": 0.60, "draw": 0.25, "away": 0.15}
+    tip = build_tip(_rayo_espanyol_form(), {"home": 2.30, "draw": 3.40, "away": 3.10},
+                    elo_1x2=elo)
+    assert tip["models"] == ["elo", "poisson"]
+    assert tip["probs"]["1X2"]["home"] > base["probs"]["1X2"]["home"]
+    assert any(r.startswith("Elo 1X2:") for r in tip["reasons"])
+
+
+def test_build_tip_split_models_cap_verdict():
+    """Wildly disagreeing Elo caps BET → MARGINAL and says split."""
+    form = _rayo_espanyol_form()
+    form["home_goals_for"] = 3.2
+    form["away_goals_for"] = 0.3
+    odds = {"home": 1.40, "draw": 5.00, "away": 8.00}
+    alone = build_tip(form, odds)
+    assert alone["verdict"] == "BET"
+    split = build_tip(form, odds, elo_1x2={"home": 0.10, "draw": 0.20, "away": 0.70})
+    assert split["verdict"] == "MARGINAL"
+    assert any("split" in r for r in split["reasons"])
 
 
 if __name__ == "__main__":
