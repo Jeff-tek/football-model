@@ -12,7 +12,8 @@ import requests
 BASE = "https://site.api.espn.com/apis/site/v2/sports/soccer"
 STANDINGS_BASE = "https://site.api.espn.com/apis/v2/sports/soccer"
 TIMEOUT = 15
-HEADERS = {"User-Agent": "Mozilla/5.0 (football-model/1.0)"}
+# NOTE: send no custom User-Agent — ESPN returns 403 Access Denied for
+# custom UAs but allows requests' default (verified 2026-09-15).
 log = logging.getLogger(__name__)
 
 
@@ -30,7 +31,7 @@ def _fix_pvt(obj):
 def _get(url, params=None):
     """GET JSON; log + return None on any failure (never raise)."""
     try:
-        r = requests.get(url, params=params, timeout=TIMEOUT, headers=HEADERS)
+        r = requests.get(url, params=params, timeout=TIMEOUT)
         r.raise_for_status()
         return _fix_pvt(r.json())
     except Exception as e:
@@ -52,27 +53,78 @@ def _to_float(v):
         return None
 
 
+def _dec_or_none(f):
+    return round(f, 3) if isinstance(f, float) and f > 1 else None
+
+
+def american_to_decimal(v):
+    """American odds (+135, -110, 'EVEN') → decimal. Decimal input passes through."""
+    if isinstance(v, str):
+        s = v.strip().upper()
+        if s in ("EVEN", "EV"):
+            return 2.0
+        if s[:1] in ("+", "-"):
+            v = _to_int(s)
+            if v is None:
+                return None
+        else:
+            return _dec_or_none(_to_float(s))
+    if isinstance(v, bool):
+        return None
+    if isinstance(v, (int, float)) and abs(v) < 100:
+        return _dec_or_none(float(v))
+    ml = _to_int(v)
+    if not ml:
+        return None
+    return round(1 + ml / 100, 3) if ml > 0 else round(1 + 100 / abs(ml), 3)
+
+
 def _competitors(comp):
     out = {}
     for c in comp.get("competitors", []) or []:
+        if not isinstance(c, dict):
+            continue
         team = c.get("team", {}) or {}
         side = c.get("homeAway", "away")
         out[side] = {
             "id": str(team.get("id", "")),
             "name": team.get("displayName") or team.get("shortDisplayName") or "",
             "score": _to_int(c.get("score")),
+            "form": c.get("form", "") or "",
         }
     return out
 
 
+def _ml(moneyline, side):
+    """Close American line preferred, open as fallback → decimal."""
+    if not isinstance(moneyline, dict):
+        return None
+    leg = moneyline.get(side) or {}
+    if not isinstance(leg, dict):
+        return None
+    for key in ("close", "open"):
+        node = leg.get(key) or {}
+        if isinstance(node, dict) and node.get("odds") is not None:
+            dec = american_to_decimal(node.get("odds"))
+            if dec:
+                return dec
+    return None
+
+
 def _odds(comp):
-    for o in comp.get("odds", []) or []:
-        for d in o.get("details", []) or []:
-            price = d.get("price", {}) or {}
-            return {"provider": (d.get("provider", {}) or {}).get("name", ""),
-                    "home": _to_float(price.get("home")),
-                    "away": _to_float(price.get("away")),
-                    "draw": _to_float(price.get("draw"))}
+    """Decimal 1X2 from DraftKings moneyline; {} when absent/incomplete."""
+    entries = comp.get("odds") or []
+    if not isinstance(entries, list):
+        return {}
+    dicts = [o for o in entries if isinstance(o, dict)]
+    dk = next((o for o in dicts if (o.get("provider") or {}).get("name") == "DraftKings"), None)
+    cands = ([dk] + [o for o in dicts if o is not dk]) if dk else dicts
+    for o in cands:
+        ml = o.get("moneyline")
+        h, d, a = _ml(ml, "home"), _ml(ml, "draw"), _ml(ml, "away")
+        if h and d and a:
+            return {"provider": (o.get("provider") or {}).get("name", ""),
+                    "home": h, "draw": d, "away": a}
     return {}
 
 
@@ -96,6 +148,8 @@ def _parse_event(ev):
         "away_score": teams["away"]["score"],
         "state": status.get("state", "pre"),
         "detail": status.get("shortDetail", ""),
+        "home_form": teams["home"].get("form", ""),
+        "away_form": teams["away"].get("form", ""),
         "odds": _odds(comp),
     }
 

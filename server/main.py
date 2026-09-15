@@ -165,6 +165,24 @@ def _expected_goals(home_price, draw_price, away_price):
     return home_xg, away_xg
 
 
+def _to_dec(v):
+    """American moneyline → decimal (standalone mirror of ingest.espn_free)."""
+    try:
+        s = str(v).strip().upper()
+        if s in ("EVEN", "EV"):
+            return 2.0
+        ml = int(s)
+    except (TypeError, ValueError):
+        try:
+            f = float(str(v))
+            return round(f, 3) if f > 1 else None
+        except (TypeError, ValueError):
+            return None
+    if abs(ml) < 100:
+        return round(float(ml), 3) if ml > 1 else None
+    return round(1 + ml / 100, 3) if ml > 0 else round(1 + 100 / abs(ml), 3)
+
+
 def _verdict_pick(edges, p_o25, p_btts):
     """Best pick: highest positive 1X2 edge, else highest-prob market."""
     best_market, best_edge = max(edges.items(), key=lambda kv: kv[1])
@@ -299,8 +317,8 @@ def tips(league: str = "La Liga"):
             ap = odds.get("away")
             home_id = ev.get("home_id", "")
             away_id = ev.get("away_id", "")
-            home_form = ""
-            away_form = ""
+            home_form = ev.get("home_form", "")
+            away_form = ev.get("away_form", "")
         else:
             # Raw ESPN format: competitions[0].competitors + odds
             comps = ev.get("competitions", [{}])
@@ -310,32 +328,27 @@ def tips(league: str = "La Liga"):
             competitors = comp.get("competitors", [])
             if len(competitors) < 2:
                 continue
-            home_name = competitors[0].get("team", {}).get("displayName", "")
-            away_name = competitors[1].get("team", {}).get("displayName", "")
+            sides = {c.get("homeAway", "away"): c for c in competitors if isinstance(c, dict)}
+            home_c = sides.get("home", competitors[0])
+            away_c = sides.get("away", competitors[1])
+            home_name = (home_c.get("team") or {}).get("displayName", "")
+            away_name = (away_c.get("team") or {}).get("displayName", "")
             match_date = ev.get("date", "")
             odds_list = comp.get("odds", [])
-            dk = next((o for o in odds_list if "draftkings" in o.get("provider", {}).get("name", "").lower()), None)
+            dk = next((o for o in odds_list if "draftkings" in (o.get("provider") or {}).get("name", "").lower()), None)
             if not dk:
                 dk = odds_list[0] if odds_list else None
             if not dk:
                 continue
-            hp = dk.get("homeTeamOdds", {}).get("moneyLine")
-            dp = dk.get("drawOdds", {}).get("moneyLine") or dk.get("awayTeamOdds", {}).get("drawOdds")
-            ap = dk.get("awayTeamOdds", {}).get("moneyLine")
-            home_id = competitors[0].get("team", {}).get("id", "")
-            away_id = competitors[1].get("team", {}).get("id", "")
-            home_form = next(
-                (c.get("records", [{}])[0].get("summary", "")
-                 for c in competitors if c.get("homeAway") == "home"), "")
-            away_form = next(
-                (c.get("records", [{}])[0].get("summary", "")
-                 for c in competitors if c.get("homeAway") == "away"), "")
+            hp = _to_dec((dk.get("homeTeamOdds") or {}).get("moneyLine"))
+            dp = _to_dec((dk.get("drawOdds") or {}).get("moneyLine"))
+            ap = _to_dec((dk.get("awayTeamOdds") or {}).get("moneyLine"))
+            home_id = (home_c.get("team") or {}).get("id", "")
+            away_id = (away_c.get("team") or {}).get("id", "")
+            home_form = home_c.get("form", "") or ""
+            away_form = away_c.get("form", "") or ""
 
         if not all([hp, dp, ap]):
-            continue
-        try:
-            hp, dp, ap = float(hp), float(dp), float(ap)
-        except (TypeError, ValueError):
             continue
         if hp <= 1 or dp <= 1 or ap <= 1:
             continue

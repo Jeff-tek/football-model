@@ -12,9 +12,14 @@ def _scoreboard_resp(events=None):
     return {"events": events or []}
 
 
+def _ml_leg(odds):
+    return {"close": {"odds": odds}}
+
+
 def _event(ev_id="1001", state="pre", home_id="86", away_id="88",
            home_name="Real Madrid", away_name="Espanyol",
-           home_score="0", away_score="0"):
+           home_score="0", away_score="0",
+           home_ml="+180", away_ml="+450", draw_ml="+360"):
     return {
         "id": ev_id,
         "date": "2026-09-15T20:00Z",
@@ -22,13 +27,17 @@ def _event(ev_id="1001", state="pre", home_id="86", away_id="88",
         "competitions": [{
             "competitors": [
                 {"team": {"id": home_id, "displayName": home_name},
-                 "homeAway": "home", "score": home_score},
+                 "homeAway": "home", "score": home_score, "form": "WWDWL"},
                 {"team": {"id": away_id, "displayName": away_name},
-                 "homeAway": "away", "score": away_score},
+                 "homeAway": "away", "score": away_score, "form": "LWLDL"},
             ],
             "status": {"type": {"state": state, "shortDetail": "Scheduled" if state == "pre" else "Final"}},
-            "odds": [{"details": [{"provider": {"name": "DraftKings"},
-                                    "price": {"home": 1.80, "away": 4.50, "draw": 3.60}}]}],
+            "odds": [{"provider": {"name": "DraftKings"},
+                      "details": [f"{home_name[:3].upper()} {home_ml}"],
+                      "moneyline": {
+                          "home": _ml_leg(home_ml),
+                          "draw": _ml_leg(draw_ml),
+                          "away": _ml_leg(away_ml)}}],
         }],
     }
 
@@ -97,7 +106,10 @@ def test_scoreboard_parses_match(mock_get):
     assert m["state"] == "pre"
     assert m["home_score"] == 0
     assert m["away_score"] == 0
-    assert "odds" in m
+    assert m["odds"] == {"provider": "DraftKings",
+                         "home": 2.8, "draw": 4.6, "away": 5.5}
+    assert m["home_form"] == "WWDWL"
+    assert m["away_form"] == "LWLDL"
 
 
 @patch("ingest.espn_free.requests.get")
@@ -149,12 +161,44 @@ def test_scoreboard_missing_odds(mock_get):
 
 
 @patch("ingest.espn_free.requests.get")
-def test_scoreboard_user_agent(mock_get):
+def test_scoreboard_no_custom_user_agent(mock_get):
+    # ESPN 403s custom User-Agents; requests' default must pass through untouched.
     mock_get.return_value = _mock_get(_scoreboard_resp())
     from ingest.espn_free import fetch_scoreboard
     fetch_scoreboard("eng.1")
     _, kwargs = mock_get.call_args
-    assert "User-Agent" in kwargs.get("headers", {})
+    assert "User-Agent" not in kwargs.get("headers", {})
+
+
+def test_american_to_decimal():
+    from ingest.espn_free import american_to_decimal as d
+    assert d("+135") == 2.35
+    assert d("-110") == round(1 + 100 / 110, 3)
+    assert d(240) == 3.4
+    assert d("EVEN") == 2.0
+    assert d(1.8) == 1.8
+    assert d("2.5") == 2.5
+    assert d(None) is None
+    assert d("bogus") is None
+
+
+@patch("ingest.espn_free.requests.get")
+def test_scoreboard_open_fallback(mock_get):
+    ev = _event()
+    ml = ev["competitions"][0]["odds"][0]["moneyline"]
+    ml["home"] = {"open": {"odds": "-110"}}
+    mock_get.return_value = _mock_get(_scoreboard_resp([ev]))
+    from ingest.espn_free import fetch_scoreboard
+    assert fetch_scoreboard("esp.1")[0]["odds"]["home"] == round(1 + 100 / 110, 3)
+
+
+@patch("ingest.espn_free.requests.get")
+def test_scoreboard_incomplete_moneyline_skipped(mock_get):
+    ev = _event()
+    ev["competitions"][0]["odds"][0]["moneyline"].pop("away")
+    mock_get.return_value = _mock_get(_scoreboard_resp([ev]))
+    from ingest.espn_free import fetch_scoreboard
+    assert fetch_scoreboard("esp.1")[0]["odds"] == {}
 
 
 # --- fetch_standings tests ---

@@ -7,14 +7,13 @@ import requests
 
 BASE = "https://api.openligadb.de"
 TIMEOUT = 15
-HEADERS = {"User-Agent": "Mozilla/5.0 (football-model/1.0)"}
 log = logging.getLogger(__name__)
 
 
 def _get(url):
     """GET JSON; log + return None on any failure (never raise)."""
     try:
-        r = requests.get(url, timeout=TIMEOUT, headers=HEADERS)
+        r = requests.get(url, timeout=TIMEOUT)
         r.raise_for_status()
         return r.json()
     except Exception as e:

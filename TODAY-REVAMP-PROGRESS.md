@@ -7,7 +7,24 @@ Goal: `/` = Today's Matches across ESPN 5, click row → tip. Local-day filter. 
 - [x] `frontend/app/components/TipCard.tsx`: extract from tips/page.tsx
 - [x] `frontend/app/desk/page.tsx`: preserve Model Desk (old page.tsx)
 - [x] `frontend/app/page.tsx`: rewrite as Today's Matches
-- [ ] Push as Jeff-tek, exclude backup tarball
+- [x] Push as Jeff-tek, exclude backup tarball
+
+## Status 2026-09-15 ~13:0x UTC
+- Committed `4bff8e8` as Jeff-tek, pushed `main -> main` (repo moved Jeff-tek/football-model, push followed redirect OK).
+- `gh run list` empty — no Actions workflows in repo, so no CI to wait for; Vercel deploys on push.
+- Working tree clean except untracked `host-uncommitted-backup-2026-08-17.tar.gz` (intentionally never added).
+
+## Fix 2026-09-15 — empty tips root causes (2 bugs)
+1. `ingest/espn_free.py` custom `User-Agent: Mozilla/5.0 (football-model/1.0)` → ESPN 403 Access Denied
+   (requests default UA returns 200; verified per-league). Dropped custom HEADERS in
+   `espn_free._get` + `openliga_free._get`. Test `test_scoreboard_user_agent` → `test_scoreboard_no_custom_user_agent`.
+2. `_odds` parsed a stale schema (`odds[].details[].price`) — live ESPN uses
+   `odds[].moneyline.{home,draw,away}.{close,open}.odds` (American) + string `details`
+   (crashed with AttributeError → /tips 500/empty). Rewrote `_odds` + new `american_to_decimal`,
+   added `home_form`/`away_form` from competitor `form`. `server/main.py`: parsed branch uses
+   new form fields; raw fallback converts moneyLine via local `_to_dec` + homeAway mapping.
+- Verified live: eng/esp/ita/ger/fra all parse with decimal odds + form (La Liga has 2 today).
+- Tests: test_espn_free 24/24, test_tips 29/29, py_compile OK.
 
 ## Changed files
 - (pending) `frontend/app/lib/today.ts` — NEW
