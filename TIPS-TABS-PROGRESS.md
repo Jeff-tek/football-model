@@ -11,9 +11,9 @@ Tabs at top showing available tips per league. Today selecting a league shows on
 - Fix is frontend-only: fetch all 6 leagues once (`Promise.allSettled`, server caches 120s), tab bar with count badges, record all leagues' picks to the P&L ledger.
 
 ## Todos
-- [ ] page.tsx all-league fetch + tabs — CI
-- [ ] globals.css league-tabs styles — CI
-- [ ] Push as Jeff-tek — commit hash
+- [x] page.tsx all-league fetch + tabs — CI (pushed `4fb63b8`)
+- [x] globals.css league-tabs styles — CI (pushed `4fb63b8`)
+- [x] Push as Jeff-tek — commit `4fb63b8`, pushed `main -> main` 2026-09-15
 
 ## Changed files
 - frontend/app/tips/page.tsx (tabs + all-league load)
