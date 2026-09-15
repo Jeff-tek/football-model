@@ -1,121 +1,126 @@
 "use client";
-import { useEffect, useState } from "react";
-import { getTeams, getFixtures, getUpcoming, analyze, type Analysis } from "./lib/api";
-import Slip from "./slip";
+import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
+import { getTodayMatches, type LeagueGroup } from "./lib/today";
+import TipCard, { fmtDate } from "./components/TipCard";
 
-const LEAGUES = ["Premier League", "La Liga", "Serie A", "Bundesliga",
-  "Ligue 1", "Russian Premier League"];
-const GK = [["first_choice_top5", "First choice · top-5"],
-  ["first_choice_avg", "First choice · avg"], ["backup", "Backup"],
-  ["emergency", "Emergency"]];
-
-export default function Home() {
-  const [league, setLeague] = useState(LEAGUES[0]);
-  const [teams, setTeams] = useState<string[]>([]);
-  const [fixtures, setFixtures] = useState<{home:string;away:string;date:string}[]>([]);
-  const [home, setHome] = useState("");
-  const [away, setAway] = useState("");
-  const [homeGk, setHomeGk] = useState("first_choice_avg");
-  const [awayGk, setAwayGk] = useState("first_choice_avg");
-  const [rivalry, setRivalry] = useState(false);
-  const [res, setRes] = useState<Analysis | null>(null);
-  const [loading, setLoading] = useState(false);
+export default function Today() {
+  const [groups, setGroups] = useState<LeagueGroup[]>([]);
+  const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
+  const [open, setOpen] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setErr("");
+    try {
+      setGroups(await getTodayMatches());
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "failed to load matches");
+      setGroups([]);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
-    getTeams(league).then(setTeams);
-    getFixtures(league).then(fxs => {
-      if (fxs.length) { setFixtures(fxs); return; }
-      getUpcoming(league).then(uxs => setFixtures(
-        uxs.map(u => ({ home: u.home, away: u.away, date: "" }))
-      ));
-    });
-    setHome(""); setAway(""); setRes(null);
-  }, [league]);
+    load();
+  }, [load]);
 
-  async function run() {
-    if (!home || !away) return;
-    setLoading(true); setErr(""); setRes(null);
-    try {
-      setRes(await analyze({
-        league,
-        home,
-        away,
-        overrides: { rivalry },
-        home_gk: homeGk !== "first_choice_avg" ? homeGk : undefined,
-        away_gk: awayGk !== "first_choice_avg" ? awayGk : undefined,
-      }));
-    } catch (e: any) { setErr(e.message ?? "failed"); }
-    finally { setLoading(false); }
-  }
+  const total = groups.reduce((n, g) => n + g.tips.length, 0);
+  const todayLabel = new Date().toLocaleDateString(undefined, {
+    weekday: "long",
+    month: "long",
+    day: "numeric",
+  });
 
   return (
     <main className="wrap">
-      <header className="masthead">
+      <header className="masthead tips-head">
         <div>
-          <div className="kicker">EV-First Decision Engine · v2.2</div>
-          <h1 className="title">The Model Desk</h1>
+          <div className="kicker">Top 5 leagues · updates daily on load</div>
+          <h1 className="title">Today&apos;s Matches</h1>
+          <p className="tips-meta">
+            {todayLabel} · {loading ? "loading…" : `${total} match${total === 1 ? "" : "es"} today`}
+          </p>
         </div>
-        <p className="sub">Pick a fixture. Live data feeds the gates, composite Z, and EV check.</p>
+        <div className="tips-controls">
+          <button className="refresh" onClick={load} disabled={loading}>
+            {loading ? "Loading…" : "Refresh"}
+          </button>
+          <Link className="source-link" href="/tips">
+            All tips
+          </Link>
+          <Link className="source-link" href="/desk">
+            Model Desk
+          </Link>
+        </div>
       </header>
 
-      <div className="grid2">
-        <section>
-          <div className="eyebrow"><span className="num">01</span> Fixture</div>
-          <label className="f">League
-            <select value={league} onChange={e => setLeague(e.target.value)}>
-              {LEAGUES.map(l => <option key={l}>{l}</option>)}
-            </select>
-          </label>
+      {loading && <div className="empty">Loading today&apos;s matches across top leagues…</div>}
+      {err && <p className="err">{err}</p>}
 
-          {fixtures.length > 0 && (
-            <label className="f">Upcoming
-              <select onChange={e => { const f = fixtures[+e.target.value];
-                if (f) { setHome(f.home); setAway(f.away); } }}>
-                <option>Pick a scheduled match…</option>
-                  {fixtures.map((f, i) => (
-                    <option key={i} value={i}>{f.home} v {f.away}{f.date ? ` — ${f.date.slice(0,10)}` : ""}</option>
-                  ))}
-              </select>
-            </label>
-          )}
+      {!loading && !err && total === 0 && (
+        <div className="empty">
+          No matches with odds today. Check back later — or browse{" "}
+          <Link className="source-link" href="/tips">
+            all tips
+          </Link>
+          .
+        </div>
+      )}
 
-          <div className="row">
-            <label className="f">Home
-              <select value={home} onChange={e => setHome(e.target.value)}>
-                <option value="">Select…</option>
-                {teams.map(t => <option key={t}>{t}</option>)}
-              </select></label>
-            <label className="f">Away
-              <select value={away} onChange={e => setAway(e.target.value)}>
-                <option value="">Select…</option>
-                {teams.map(t => <option key={t}>{t}</option>)}
-              </select></label>
-          </div>
-          <div className="row">
-            <label className="f">Home GK
-              <select value={homeGk} onChange={e => setHomeGk(e.target.value)}>
-                {GK.map(g => <option key={g[0]} value={g[0]}>{g[1]}</option>)}</select></label>
-            <label className="f">Away GK
-              <select value={awayGk} onChange={e => setAwayGk(e.target.value)}>
-                {GK.map(g => <option key={g[0]} value={g[0]}>{g[1]}</option>)}</select></label>
-          </div>
-          <label className="f check">
-            <input type="checkbox" checked={rivalry} onChange={e => setRivalry(e.target.checked)} />
-            Rivalry / derby
-          </label>
+      {!loading &&
+        !err &&
+        groups.map(
+          (g) =>
+            g.tips.length > 0 && (
+              <section key={g.league}>
+                <div className="eyebrow">
+                  <span className="num">{g.tips.length}</span> {g.league}
+                </div>
+                <div className="today-list">
+                  {g.tips.map((t) => {
+                    const key = `${g.league}:${t.home}-${t.away}`;
+                    const isOpen = open === key;
+                    return (
+                      <div key={key} className="today-row">
+                        <button
+                          className="today-btn"
+                          onClick={() => setOpen(isOpen ? null : key)}
+                          aria-expanded={isOpen}
+                        >
+                          <span className="today-matchup">
+                            {t.home} <span className="vs">v</span> {t.away}
+                          </span>
+                          <span className="today-right">
+                            <span className="today-time">{fmtDate(t.date)}</span>
+                            <span className={`verdict-pill ${t.verdict === "BET" ? "bet" : t.verdict === "MARGINAL" ? "marginal" : "nobet"}`}>
+                              {t.verdict}
+                            </span>
+                            <span className="today-chev">{isOpen ? "▾" : "▸"}</span>
+                          </span>
+                        </button>
+                        {isOpen && (
+                          <div className="today-tip">
+                            <TipCard t={t} />
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </section>
+            )
+        )}
 
-          <button className="run" onClick={run} disabled={loading || !home || !away}>
-            {loading ? "Analyzing…" : "Run analysis"}
-          </button>
-          {err && <p className="err">{err}</p>}
-        </section>
-
-        <section className="results">
-          <div className="eyebrow"><span className="num">02</span> Verdict</div>
-          {res ? <Slip a={res} home={home} away={away} />
-               : <div className="empty">Pick a fixture and run it. The verdict lands here.</div>}
-        </section>
+      <div className="disclaimer">
+        <b>Responsible gambling.</b> Model output from free data, not financial advice.
+        Odds move — re-check before betting. If gambling stops being fun, seek help:{" "}
+        <a className="source-link" href="https://www.begambleaware.org" target="_blank" rel="noreferrer">
+          BeGambleAware
+        </a>
+        .
       </div>
     </main>
   );
