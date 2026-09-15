@@ -79,6 +79,14 @@ def american_to_decimal(v):
     return round(1 + ml / 100, 3) if ml > 0 else round(1 + 100 / abs(ml), 3)
 
 
+def _score(c):
+    """Competitor score: plain string on scoreboards, {value/displayValue} dict on schedules."""
+    s = c.get("score")
+    if isinstance(s, dict):
+        return _to_int(s.get("value", s.get("displayValue")))
+    return _to_int(s)
+
+
 def _competitors(comp):
     out = {}
     for c in comp.get("competitors", []) or []:
@@ -89,7 +97,7 @@ def _competitors(comp):
         out[side] = {
             "id": str(team.get("id", "")),
             "name": team.get("displayName") or team.get("shortDisplayName") or "",
-            "score": _to_int(c.get("score")),
+            "score": _score(c),
             "form": c.get("form", "") or "",
         }
     return out

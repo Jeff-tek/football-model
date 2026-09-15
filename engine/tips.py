@@ -143,9 +143,9 @@ def build_tip(fixture_form: Dict, market_odds: Dict) -> Dict:
 
     Returns dict with pick, probs, fair_odds, edge, verdict, reasons, confidence.
     """
-    # Lambdas from form
-    lh = fixture_form["home_goals_for"]   # home expected to score
-    la = fixture_form["away_goals_for"]   # away expected to score
+    # Lambdas from form (clamped: λ=0 makes draw prob exactly 1 → fair() divides by zero)
+    lh = max(fixture_form["home_goals_for"], 0.05)   # home expected to score
+    la = max(fixture_form["away_goals_for"], 0.05)   # away expected to score
     rho = fixture_form.get("rho", 0.02)
     sample = fixture_form.get("sample", 5)
 

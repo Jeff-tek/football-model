@@ -357,7 +357,7 @@ def tips(league: str = "La Liga"):
         tip = None
         try:
             tip = _engine_tip(home_name, away_name, home_id, away_id, hp, dp, ap, espn_key)
-        except (ImportError, ModuleNotFoundError, KeyError, TypeError, ValueError):
+        except Exception:
             tip = None
         if not tip:
             tip = _simple_tip(hp, dp, ap)

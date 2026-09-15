@@ -201,6 +201,21 @@ def test_scoreboard_incomplete_moneyline_skipped(mock_get):
     assert fetch_scoreboard("esp.1")[0]["odds"] == {}
 
 
+@patch("ingest.espn_free.requests.get")
+def test_schedule_dict_score_parsed(mock_get):
+    """Schedule endpoints return score as {value/displayValue} dict, not a string."""
+    ev = _event(state="post", home_score="3", away_score="1")
+    for c in ev["competitions"][0]["competitors"]:
+        raw = c["score"]
+        c["score"] = {"value": float(raw), "displayValue": raw}
+    mock_get.return_value = _mock_get(_schedule_resp([ev]))
+    from ingest.espn_free import fetch_team_schedule
+    result = fetch_team_schedule("86")
+    assert len(result) == 1
+    assert result[0]["home_score"] == 3
+    assert result[0]["away_score"] == 1
+
+
 # --- fetch_standings tests ---
 
 @patch("ingest.espn_free.requests.get")

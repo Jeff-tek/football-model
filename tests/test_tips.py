@@ -220,6 +220,16 @@ def test_build_tip_kelly_in_output():
     assert 0.0 <= tip["kelly"] <= 0.02
 
 
+def test_build_tip_zero_lambdas_no_crash():
+    """Scoreless last-5 (λ=0) must not ZeroDivision (live Rayo case, 2026-09-15)."""
+    form = _rayo_espanyol_form()
+    form["home_goals_for"] = 0.0
+    form["away_goals_for"] = 0.0
+    tip = build_tip(form, {"home": 2.35, "draw": 3.40, "away": 3.10})
+    assert tip["verdict"] in ("BET", "MARGINAL", "NO BET")
+    assert tip["pick"] in ("home", "draw", "away")
+
+
 if __name__ == "__main__":
     tests = [v for k, v in sorted(globals().items()) if k.startswith("test_")]
     for t in tests:

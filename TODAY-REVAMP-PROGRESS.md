@@ -23,8 +23,15 @@ Goal: `/` = Today's Matches across ESPN 5, click row → tip. Local-day filter. 
    (crashed with AttributeError → /tips 500/empty). Rewrote `_odds` + new `american_to_decimal`,
    added `home_form`/`away_form` from competitor `form`. `server/main.py`: parsed branch uses
    new form fields; raw fallback converts moneyLine via local `_to_dec` + homeAway mapping.
-- Verified live: eng/esp/ita/ger/fra all parse with decimal odds + form (La Liga has 2 today).
-- Tests: test_espn_free 24/24, test_tips 29/29, py_compile OK.
+## Fix 2026-09-15b — refresh 500 root causes (2 more bugs)
+1. Schedule `competitors[].score` is a `{value/displayValue}` DICT, not a string →
+   scores parsed as None → form averages (0.0, 0.0) → λ=0 → draw prob exactly 1.0.
+2. `engine/tips.build_tip fair(0.0)` → ZeroDivisionError, uncaught by server's narrow
+   except → /tips 500.
+- Fixes: `_score()` handles dict/str; `build_tip` clamps λ ≥ 0.05; server widens engine
+  fallback to `except Exception` so a tip always returns.
+- Verified live end-to-end: 7/7 matches across ESPN 5 produce engine tips.
+- Tests: test_espn_free 25/25, test_tips 30/30, py_compile OK.
 
 ## Changed files
 - (pending) `frontend/app/lib/today.ts` — NEW
