@@ -183,6 +183,17 @@ def _to_dec(v):
     return round(1 + ml / 100, 3) if ml > 0 else round(1 + 100 / abs(ml), 3)
 
 
+def _is_today(iso):
+    """True when an ISO datetime falls on today's UTC calendar day."""
+    try:
+        dt = datetime.fromisoformat(str(iso).replace("Z", "+00:00"))
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt.date() == datetime.now(timezone.utc).date()
+    except (TypeError, ValueError):
+        return False
+
+
 def _display_league(league):
     """Display name for a league key (EPL), ESPN slug (esp.1) or name already."""
     if league in LEAGUE_SLUGS:
@@ -417,6 +428,8 @@ def tips(league: str = "La Liga"):
             open_odds = {}
 
         odds_full = all([hp, dp, ap])
+        if not _is_today(match_date):
+            continue
         if odds_full and min(hp, dp, ap) <= 1:
             continue
 

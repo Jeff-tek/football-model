@@ -23,7 +23,11 @@ Tabs at top showing available tips per league. Today selecting a league shows on
 - `git -C /root/football-model status --short`
 - push only on explicit user go-ahead (auto-proceed only under TODO CONTINUATION directive)
 
-## Gotchas
-- Russian Premier League has no ESPN free coverage → tab shows 0, empty message.
-- Slowest league gates initial render (allSettled); Refresh reloads all six.
+## Follow-up (2026-09-15): today-only filter
+- `/tips` now skips fixtures not on today's UTC calendar day (`_is_today` in server/main.py).
+- Friday Sep 18 boards (EPL/Serie A/Ligue 1) → tabs read 0 with existing empty message. Heading stays honest.
+
+## Gotchas (tabs)
+- Russia tab removed (e4c1159); /desk still lists it (DB-backed, separate source).
+- Slowest league gates initial render (allSettled); Refresh reloads all five.
 - Resume: re-read this file + `git status`, continue at first unchecked todo.
