@@ -1,4 +1,5 @@
 import type { Tip } from "../lib/tips";
+import { OddsRadar, CrowdBars } from "./ModelVisuals";
 
 const pct = (p: number): string => `${(p * 100).toFixed(0)}%`;
 
@@ -101,6 +102,19 @@ export default function TipCard({ t }: { t: Tip }) {
             <div className="prob-val">{t.confidence.toFixed(0)}%</div>
           </div>
         </div>
+        {t.lineMove && (
+          <div className="steam-line steam-own">
+            Steam:{" "}
+            {["Home", "Draw", "Away"]
+              .filter((k) => t.lineMove?.[k as keyof typeof t.lineMove])
+              .map((k) => `${k} ${t.lineMove?.[k as keyof typeof t.lineMove]}`)
+              .join(" · ")}
+          </div>
+        )}
+        <div className="viz-grid">
+          <OddsRadar t={t} />
+          <CrowdBars t={t} />
+        </div>
         <div className="tip-reasons">
           {t.reasons.map((r) => (
             <div key={r} className="tip-reason">
@@ -108,41 +122,11 @@ export default function TipCard({ t }: { t: Tip }) {
             </div>
           ))}
         </div>
-        {t.crowd && (
-          <div className="crowd-box">
-            <div className="crowd-head">
-              Crowd vs Model
-              {t.crowd.low_volume && <span className="thin-flag">thin market</span>}
-            </div>
-            <div className="crowd-grid">
-              <div className="crowd-cell">
-                <div className="prob-label">H</div>
-                <div className="prob-val">
-                  {pct(t.crowd.home)} <small>m {pct(ph)}</small>
-                </div>
-              </div>
-              <div className="crowd-cell">
-                <div className="prob-label">X</div>
-                <div className="prob-val">
-                  {pct(t.crowd.draw)} <small>m {pct(pd)}</small>
-                </div>
-              </div>
-              <div className="crowd-cell">
-                <div className="prob-label">A</div>
-                <div className="prob-val">
-                  {pct(t.crowd.away)} <small>m {pct(pa)}</small>
-                </div>
-              </div>
-            </div>
-            {t.lineMove && (
-              <div className="steam-line">
-                Steam:{" "}
-                {["Home", "Draw", "Away"]
-                  .filter((k) => t.lineMove?.[k as keyof typeof t.lineMove])
-                  .map((k) => `${k} ${t.lineMove?.[k as keyof typeof t.lineMove]}`)
-                  .join(" · ")}
-              </div>
-            )}
+        {t.crowd?.url && (
+          <div className="crowd-link-row">
+            <a className="source-link" href={t.crowd.url} target="_blank" rel="noreferrer">
+              Crowd market ↗
+            </a>
           </div>
         )}
         <div className="source-links">

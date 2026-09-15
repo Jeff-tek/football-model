@@ -143,12 +143,33 @@ select:focus-visible, input:focus-visible { outline: none; border-color: var(--c
 .today-tip { border-top: 1px solid var(--line); padding: 12px; }
 .today-tip .tip-card { border: 0; }
 
-/* ---- Crowd box ---- */
-.crowd-box { border-top: 1px solid var(--line); margin-top: 12px; padding-top: 10px; }
-.crowd-head { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.1em;
+/* ---- Visuals: radar + crowd duel ---- */
+.viz-grid { display: grid; grid-template-columns: 1fr; gap: 12px; margin: 14px 0 4px; }
+@media (min-width: 640px) { .viz-grid { grid-template-columns: 1fr 1fr; align-items: start; } }
+.viz-block { background: var(--paper-3); border-radius: 10px; padding: 12px 14px; }
+.viz-title { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.1em;
   color: var(--ink-3); font-weight: 700; margin-bottom: 8px; display: flex; gap: 8px; align-items: center; }
+.radar { width: 100%; max-width: 250px; display: block; margin: 0 auto; }
+.radar-ring { fill: none; stroke: var(--line-strong); stroke-width: 1; opacity: 0.7; }
+.radar-spoke { stroke: var(--line-strong); stroke-width: 1; opacity: 0.5; }
+.radar-area { fill: var(--bet); fill-opacity: 0.22; stroke: var(--bet); stroke-width: 2; }
+.radar-dot { fill: var(--bet); }
+.radar-label { font-size: 9px; fill: var(--ink-2); font-weight: 600; }
+.duel-rows { display: flex; flex-direction: column; gap: 10px; }
+.duel-row { display: grid; grid-template-columns: 18px 1fr 40px; align-items: center; gap: 8px; }
+.duel-k { font-size: 0.75rem; font-weight: 700; color: var(--ink-2); }
+.duel-track { position: relative; height: 12px; background: var(--paper); border-radius: 6px; }
+.duel-model { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 6px;
+  background: var(--ink-3); opacity: 0.85; }
+.duel-crowd { position: absolute; top: -3px; bottom: -3px; width: 3px; border-radius: 2px;
+  background: var(--clay); }
+.duel-d { font-size: 0.75rem; font-weight: 700; text-align: right; font-variant-numeric: tabular-nums; }
+.duel-d.hot { color: var(--bet); } .duel-d.cold { color: var(--nobet); }
+.duel-legend { display: flex; gap: 12px; margin-top: 8px; font-size: 0.7rem; color: var(--ink-3); }
+.lg-model::before { content: "▬ "; color: var(--ink-3); }
+.lg-crowd::before { content: "┃ "; color: var(--clay); }
+.crowd-link-row { margin: 10px 0 2px; }
+.steam-line { font-size: 0.78rem; color: var(--ink-2); }
+.steam-own { margin: 10px 0 2px; }
 .thin-flag { font-size: 0.65rem; background: var(--monitor-soft); color: oklch(48% 0.1 70%);
   padding: 2px 8px; border-radius: 20px; letter-spacing: 0.04em; }
-.crowd-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
-.crowd-cell { background: var(--paper-3); border-radius: 8px; padding: 8px 10px; text-align: center; }
-.steam-line { font-size: 0.78rem; color: var(--ink-2); margin-top: 8px; }
