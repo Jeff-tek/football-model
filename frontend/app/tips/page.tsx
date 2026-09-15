@@ -1,7 +1,9 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
 import { getTips, type TipsResponse } from "../lib/tips";
+import { recordTips } from "../lib/ledger";
 import TipCard, { fmtDate } from "../components/TipCard";
+import PnLBar from "../components/PnLBar";
 
 const LEAGUES = ["La Liga", "Premier League", "Serie A", "Bundesliga",
   "Ligue 1", "Russian Premier League"];
@@ -15,7 +17,9 @@ export default function TipsPage() {
   const load = useCallback(async (lg: string) => {
     setLoading(true); setErr("");
     try {
-      setData(await getTips(lg));
+      const tips = await getTips(lg);
+      setData(tips);
+      recordTips(lg, tips.tips);
     } catch (e) {
       setErr(e instanceof Error ? e.message : "failed to load tips");
       setData(null);
@@ -48,6 +52,7 @@ export default function TipsPage() {
           {data.league} · as of {fmtDate(data.as_of)} · cached {data.ttl}s · daily cron {data.cron.split(": ")[1]}
         </p>
       )}
+      <PnLBar refreshKey={data?.as_of} />
 
       {loading && <div className="empty">Pulling live scoreboard + odds…</div>}
       {err && <p className="err">{err}</p>}

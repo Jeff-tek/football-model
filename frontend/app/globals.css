@@ -143,9 +143,13 @@ select:focus-visible, input:focus-visible { outline: none; border-color: var(--c
 .today-tip { border-top: 1px solid var(--line); padding: 12px; }
 .today-tip .tip-card { border: 0; }
 
-/* ---- Visuals: radar + crowd duel ---- */
+/* ---- Visuals: radar + crowd duel + team data ---- */
 .viz-grid { display: grid; grid-template-columns: 1fr; gap: 12px; margin: 14px 0 4px; }
 @media (min-width: 640px) { .viz-grid { grid-template-columns: 1fr 1fr; align-items: start; } }
+.viz-stack { display: flex; flex-direction: column; gap: 12px; margin: 14px 0 4px; }
+.viz-duel-row { display: grid; grid-template-columns: 1fr; gap: 12px; }
+@media (min-width: 640px) { .viz-duel-row { grid-template-columns: 1fr 1fr; align-items: start; } }
+.viz-duel-row > :only-child { grid-column: 1 / -1; }
 .viz-block { background: var(--paper-3); border-radius: 10px; padding: 12px 14px; }
 .viz-title { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.1em;
   color: var(--ink-3); font-weight: 700; margin-bottom: 8px; display: flex; gap: 8px; align-items: center; }
@@ -173,3 +177,25 @@ select:focus-visible, input:focus-visible { outline: none; border-color: var(--c
 .steam-own { margin: 10px 0 2px; }
 .thin-flag { font-size: 0.65rem; background: var(--monitor-soft); color: oklch(48% 0.1 70%);
   padding: 2px 8px; border-radius: 20px; letter-spacing: 0.04em; }
+
+/* ---- Team duel table ---- */
+.team-table { width: 100%; border-collapse: collapse; font-size: 0.78rem; font-variant-numeric: tabular-nums; }
+.team-table th { font-size: 0.72rem; text-align: left; color: var(--ink-2); padding: 2px 6px 6px 0; }
+.team-table th:not(:first-child), .team-table td:not(:first-child) { text-align: center; min-width: 64px; }
+.team-table td { padding: 3px 6px 3px 0; border-top: 1px solid var(--line); color: var(--ink); }
+.team-table .team-k { color: var(--ink-3); font-weight: 600; text-transform: uppercase;
+  font-size: 0.65rem; letter-spacing: 0.06em; }
+
+/* ---- P&L bar ---- */
+.pnl-bar { border: 1.5px solid var(--ink); border-radius: 12px; background: var(--card-bg);
+  padding: 14px 18px; margin-bottom: 16px; }
+.pnl-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.pnl-title { font-family: Georgia, serif; font-size: 1.2rem; font-weight: 700; }
+.pnl-window { font-size: 0.75rem; color: var(--ink-3); }
+.pnl-units { margin-left: auto; font-size: 1.3rem; font-weight: 800; font-variant-numeric: tabular-nums; }
+.pnl-units.pos { color: var(--bet); } .pnl-units.neg { color: var(--nobet); }
+.pnl-meta { display: flex; gap: 14px; flex-wrap: wrap; font-size: 0.78rem; color: var(--ink-2); margin-top: 4px; }
+.pnl-months { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+.pnl-chip { font-size: 0.72rem; font-weight: 600; background: var(--paper-3);
+  border-radius: 20px; padding: 3px 10px; font-variant-numeric: tabular-nums; }
+.pnl-fine { font-size: 0.7rem; color: var(--ink-3); margin-top: 8px; }

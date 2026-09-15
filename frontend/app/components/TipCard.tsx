@@ -1,5 +1,6 @@
 import type { Tip } from "../lib/tips";
 import { OddsRadar, CrowdBars } from "./ModelVisuals";
+import TeamDuel from "./TeamDuel";
 
 const pct = (p: number): string => `${(p * 100).toFixed(0)}%`;
 
@@ -111,9 +112,12 @@ export default function TipCard({ t }: { t: Tip }) {
               .join(" · ")}
           </div>
         )}
-        <div className="viz-grid">
+        <div className="viz-stack">
           <OddsRadar t={t} />
-          <CrowdBars t={t} />
+          <div className="viz-duel-row">
+            <CrowdBars t={t} />
+            <TeamDuel t={t} />
+          </div>
         </div>
         <div className="tip-reasons">
           {t.reasons.map((r) => (

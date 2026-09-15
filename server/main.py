@@ -193,6 +193,26 @@ def _display_league(league):
     return league
 
 
+def _standings_map(espn_key):
+    """Team name (lower) → standings row for a league slug. {} on any failure."""
+    try:
+        from ingest.espn_free import fetch_standings
+        rows = _cached(f"standings:{espn_key}", lambda: fetch_standings(espn_key))
+    except Exception:
+        return {}
+    return {(r.get("team") or "").lower(): r for r in rows or [] if r.get("team")}
+
+
+def _team_meta(row):
+    """Slim league-specific team snapshot for side-by-side display. None when absent."""
+    if not row:
+        return None
+    return {"team": row.get("team"), "rank": row.get("rank"),
+            "points": row.get("points"), "played": row.get("matches_played"),
+            "wins": row.get("wins"), "draws": row.get("ties"),
+            "losses": row.get("losses"), "gf": row.get("gf"), "ga": row.get("ga")}
+
+
 def _second_opinions(league, home_name, away_name):
     """(elo_1x2, openmodel_1x2, tags) — any failure → Nones, never raise."""
     try:
@@ -350,6 +370,7 @@ def tips(league: str = "La Liga"):
         events = resp.json().get("events", [])
 
     tips_list = []
+    smap = _standings_map(espn_key)
     for ev in events:
         if parsed:
             # ingest/espn_free format: {home, away, date, odds: {home, draw, away}, ...}
@@ -478,6 +499,8 @@ def tips(league: str = "La Liga"):
             "homeForm": home_form, "awayForm": away_form,
             "homeXG": tip["homeXG"], "awayXG": tip["awayXG"],
             "bookOdds": {"home": hp, "draw": dp, "away": ap},
+            "teamMeta": {"home": _team_meta(smap.get(home_name.lower())),
+                         "away": _team_meta(smap.get(away_name.lower()))},
         })
 
     return {"league": league, "as_of": datetime.now(timezone.utc).isoformat(),
