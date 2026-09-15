@@ -446,12 +446,11 @@ def tips(league: str = "La Liga"):
         if not tip:
             continue
         if not odds_full:
-            tip["verdict"] = "NO BET"
             missing = [k for k, v in
                        (("Home", hp), ("Draw", dp), ("Away", ap)) if not v]
             tip["reasons"].append(
                 "Book odds incomplete (" + ", ".join(missing) +
-                " unavailable) — model view only, no edge check")
+                " unavailable) — no edge check, verdict on model confidence only")
 
         sources = [
             {"name": "ESPN", "url": f"https://www.espn.com/soccer/scoreboard/_/league/{espn_key}"},
