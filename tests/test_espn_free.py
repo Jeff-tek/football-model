@@ -107,7 +107,8 @@ def test_scoreboard_parses_match(mock_get):
     assert m["home_score"] == 0
     assert m["away_score"] == 0
     assert m["odds"] == {"provider": "DraftKings",
-                         "home": 2.8, "draw": 4.6, "away": 5.5}
+                         "home": 2.8, "draw": 4.6, "away": 5.5,
+                         "open": {"home": None, "draw": None, "away": None}}
     assert m["home_form"] == "WWDWL"
     assert m["away_form"] == "LWLDL"
 
@@ -180,6 +181,28 @@ def test_american_to_decimal():
     assert d("2.5") == 2.5
     assert d(None) is None
     assert d("bogus") is None
+
+
+@patch("ingest.espn_free.requests.get")
+def test_scoreboard_open_lines_captured(mock_get):
+    ev = _event()
+    ml = ev["competitions"][0]["odds"][0]["moneyline"]
+    ml["home"] = {"close": {"odds": "+135"}, "open": {"odds": "+100"}}
+    mock_get.return_value = _mock_get(_scoreboard_resp([ev]))
+    from ingest.espn_free import fetch_scoreboard
+    odds = fetch_scoreboard("esp.1")[0]["odds"]
+    assert odds["home"] == 2.35
+    assert odds["open"]["home"] == 2.0
+
+
+def test_decimal_to_american():
+    from ingest.espn_free import decimal_to_american as a
+    assert a(2.35) == "+135"
+    assert a(1.91) == "-110"
+    assert a(2.0) == "+100"
+    assert a(1.0) is None
+    assert a(None) is None
+    assert a("bogus") is None
 
 
 @patch("ingest.espn_free.requests.get")

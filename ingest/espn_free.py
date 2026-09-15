@@ -57,6 +57,19 @@ def _dec_or_none(f):
     return round(f, 3) if isinstance(f, float) and f > 1 else None
 
 
+def decimal_to_american(dec):
+    """Decimal odds → American string (+135 / -110). None when unusable."""
+    try:
+        profit = float(dec) - 1.0
+    except (TypeError, ValueError):
+        return None
+    if profit >= 1.0:
+        return f"+{round(profit * 100):.0f}"
+    if profit > 0:
+        return f"-{round(100 / profit):.0f}"
+    return None
+
+
 def american_to_decimal(v):
     """American odds (+135, -110, 'EVEN') → decimal. Decimal input passes through."""
     if isinstance(v, str):
@@ -119,6 +132,21 @@ def _ml(moneyline, side):
     return None
 
 
+def _open_lines(moneyline):
+    """Opening decimals per side (close equivalents live in _odds); Nones when absent."""
+    out = {}
+    for side in ("home", "draw", "away"):
+        dec = None
+        if isinstance(moneyline, dict):
+            leg = moneyline.get(side) or {}
+            if isinstance(leg, dict):
+                node = leg.get("open") or {}
+                if isinstance(node, dict) and node.get("odds") is not None:
+                    dec = american_to_decimal(node.get("odds"))
+        out[side] = dec
+    return out
+
+
 def _odds(comp):
     """Decimal 1X2 from DraftKings moneyline; {} when absent/incomplete."""
     entries = comp.get("odds") or []
@@ -132,7 +160,8 @@ def _odds(comp):
         h, d, a = _ml(ml, "home"), _ml(ml, "draw"), _ml(ml, "away")
         if h and d and a:
             return {"provider": (o.get("provider") or {}).get("name", ""),
-                    "home": h, "draw": d, "away": a}
+                    "home": h, "draw": d, "away": a,
+                    "open": _open_lines(ml)}
     return {}
 
 

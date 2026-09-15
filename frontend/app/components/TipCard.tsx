@@ -108,6 +108,43 @@ export default function TipCard({ t }: { t: Tip }) {
             </div>
           ))}
         </div>
+        {t.crowd && (
+          <div className="crowd-box">
+            <div className="crowd-head">
+              Crowd vs Model
+              {t.crowd.low_volume && <span className="thin-flag">thin market</span>}
+            </div>
+            <div className="crowd-grid">
+              <div className="crowd-cell">
+                <div className="prob-label">H</div>
+                <div className="prob-val">
+                  {pct(t.crowd.home)} <small>m {pct(ph)}</small>
+                </div>
+              </div>
+              <div className="crowd-cell">
+                <div className="prob-label">X</div>
+                <div className="prob-val">
+                  {pct(t.crowd.draw)} <small>m {pct(pd)}</small>
+                </div>
+              </div>
+              <div className="crowd-cell">
+                <div className="prob-label">A</div>
+                <div className="prob-val">
+                  {pct(t.crowd.away)} <small>m {pct(pa)}</small>
+                </div>
+              </div>
+            </div>
+            {t.lineMove && (
+              <div className="steam-line">
+                Steam:{" "}
+                {["Home", "Draw", "Away"]
+                  .filter((k) => t.lineMove?.[k as keyof typeof t.lineMove])
+                  .map((k) => `${k} ${t.lineMove?.[k as keyof typeof t.lineMove]}`)
+                  .join(" · ")}
+              </div>
+            )}
+          </div>
+        )}
         <div className="source-links">
           {t.sources.map((s) => (
             <a

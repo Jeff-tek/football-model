@@ -364,6 +364,7 @@ def tips(league: str = "La Liga"):
             away_id = ev.get("away_id", "")
             home_form = ev.get("home_form", "")
             away_form = ev.get("away_form", "")
+            open_odds = (ev.get("odds") or {}).get("open") or {}
         else:
             # Raw ESPN format: competitions[0].competitors + odds
             comps = ev.get("competitions", [{}])
@@ -392,6 +393,7 @@ def tips(league: str = "La Liga"):
             away_id = (away_c.get("team") or {}).get("id", "")
             home_form = home_c.get("form", "") or ""
             away_form = away_c.get("form", "") or ""
+            open_odds = {}
 
         if not all([hp, dp, ap]):
             continue
@@ -418,6 +420,49 @@ def tips(league: str = "La Liga"):
         if tip.get("tags"):
             sources.append({"name": "The Open Model", "url": "https://theopenmodel.com"})
 
+        # Crowd (Polymarket public money) — display only, never feeds the pick
+        crowd = None
+        try:
+            from ingest.polymarket_free import crowd_lookup
+            crowd = _cached(f"crowd:{home_name}|{away_name}",
+                            lambda: crowd_lookup(home_name, away_name, match_date))
+        except Exception:
+            crowd = None
+
+        # Line movement (DraftKings open → close) — display only
+        line_move = None
+        try:
+            from ingest.espn_free import decimal_to_american
+            moves = {}
+            for label, close_v, open_v in (
+                    ("Home", hp, open_odds.get("home")),
+                    ("Draw", dp, open_odds.get("draw")),
+                    ("Away", ap, open_odds.get("away"))):
+                oc, cc = decimal_to_american(open_v), decimal_to_american(close_v)
+                if oc and cc and oc != cc:
+                    moves[label] = f"{oc} → {cc}"
+            line_move = moves or None
+        except Exception:
+            line_move = None
+
+        if line_move:
+            tip["reasons"].append(
+                "Steam: " + ", ".join(f"{k} {v}" for k, v in line_move.items()))
+        if crowd:
+            vols = crowd["volumes"]
+            tip["reasons"].append(
+                f"Crowd (Polymarket): H {crowd['home']:.0%} / D {crowd['draw']:.0%} /"
+                f" A {crowd['away']:.0%}"
+                + (" — thin market, treat lightly" if crowd["low_volume"] else ""))
+            if not crowd["low_volume"]:
+                diffs = [(label, crowd[key] - tip["probs"]["1X2"][i])
+                         for i, (label, key) in
+                         enumerate((("Home", "home"), ("Draw", "draw"), ("Away", "away")))]
+                hot, d = max(diffs, key=lambda kv: kv[1])
+                if d > 0.10:
+                    tip["reasons"].append(f"Crowd hotter on {hot} than model (+{d:.0%})")
+            sources.append({"name": "Polymarket", "url": crowd["url"]})
+
         tips_list.append({
             "home": home_name, "away": away_name,
             "date": match_date,
@@ -428,6 +473,8 @@ def tips(league: str = "La Liga"):
             "reasons": tip["reasons"],
             "confidence": tip["confidence"],
             "models": tip.get("models", []),
+            "crowd": crowd,
+            "lineMove": line_move,
             "sources": sources,
             "homeForm": home_form, "awayForm": away_form,
             "homeXG": tip["homeXG"], "awayXG": tip["awayXG"],

@@ -18,6 +18,15 @@ export type Tip = {
   reasons: string[];
   confidence: number;
   models: string[];
+  crowd: {
+    home: number;
+    draw: number;
+    away: number;
+    volumes: { home: number; draw: number; away: number };
+    url: string;
+    low_volume: boolean;
+  } | null;
+  lineMove: { Home?: string; Draw?: string; Away?: string } | null;
   sources: { name: string; url: string }[];
   homeForm: string;
   awayForm: string;
