@@ -429,18 +429,17 @@ def tips(league: str = "La Liga"):
         except Exception:
             crowd = None
 
-        # Line movement (DraftKings open → close) — display only
+        # Line movement (DraftKings open → close, decimal) — display only
         line_move = None
         try:
-            from ingest.espn_free import decimal_to_american
             moves = {}
             for label, close_v, open_v in (
                     ("Home", hp, open_odds.get("home")),
                     ("Draw", dp, open_odds.get("draw")),
                     ("Away", ap, open_odds.get("away"))):
-                oc, cc = decimal_to_american(open_v), decimal_to_american(close_v)
-                if oc and cc and oc != cc:
-                    moves[label] = f"{oc} → {cc}"
+                if (isinstance(open_v, (int, float)) and open_v > 1
+                        and abs(open_v - close_v) > 0.005):
+                    moves[label] = f"{open_v:.2f} → {close_v:.2f}"
             line_move = moves or None
         except Exception:
             line_move = None
