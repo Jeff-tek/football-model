@@ -21,6 +21,7 @@ export default function TipCard({ t }: { t: Tip }) {
   const vc =
     t.verdict === "BET" ? "bet" : t.verdict === "MARGINAL" ? "marginal" : "nobet";
   const edgePos = t.edge.value > 0;
+  const noBook = t.bookOdds.home == null || t.bookOdds.draw == null || t.bookOdds.away == null;
   const [ph, pd, pa] = t.probs["1X2"];
   const [fh, fd, fa] = t.fair["1X2"];
   const [dc1x, dc12, dcx2] = t.probs.DC ?? [0, 0, 0];
@@ -50,7 +51,7 @@ export default function TipCard({ t }: { t: Tip }) {
         <div className="tip-pickbox">
           Pick<b>{t.pick}</b>
           <span className={`edge-badge ${edgePos ? "pos" : "neg"}`}>
-            {edgePos ? `+${(t.edge.value * 100).toFixed(1)}%` : "no edge"}
+            {edgePos ? `+${(t.edge.value * 100).toFixed(1)}%` : noBook ? "no odds" : "no edge"}
           </span>
         </div>
       </div>

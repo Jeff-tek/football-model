@@ -44,7 +44,7 @@ export type Tip = {
   awayForm: string;
   homeXG: number;
   awayXG: number;
-  bookOdds: { home: number; draw: number; away: number };
+  bookOdds: { home: number | null; draw: number | null; away: number | null };
   teamMeta?: { home: TeamMeta; away: TeamMeta };
 };
 

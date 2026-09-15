@@ -5,8 +5,7 @@ import { recordTips } from "../lib/ledger";
 import TipCard, { fmtDate } from "../components/TipCard";
 import PnLBar from "../components/PnLBar";
 
-const LEAGUES = ["La Liga", "Premier League", "Serie A", "Bundesliga",
-  "Ligue 1", "Russian Premier League"];
+const LEAGUES = ["La Liga", "Premier League", "Serie A", "Bundesliga", "Ligue 1"];
 
 export default function TipsPage() {
   const [league, setLeague] = useState(LEAGUES[0]);
@@ -86,16 +85,6 @@ export default function TipsPage() {
           {data.tips.map(t => <TipCard key={`${t.home}-${t.away}`} t={t} />)}
         </div>
       )}
-
-      <div className="props-note">
-        <b>Player props — manual check.</b> Free feeds (ESPN / OpenLigaDB) carry no player props.
-        Before any prop bet, verify manually:
-        <ul>
-          <li>Lineup / team news 60 min before kickoff</li>
-          <li>Goalscorer form + minutes played trend</li>
-          <li>Bookmaker prop odds vs your own estimate</li>
-        </ul>
-      </div>
 
       <div className="disclaimer">
         <b>Responsible gambling.</b> These tips are model output from free data, not financial advice.

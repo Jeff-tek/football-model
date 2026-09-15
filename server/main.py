@@ -416,20 +416,29 @@ def tips(league: str = "La Liga"):
             away_form = away_c.get("form", "") or ""
             open_odds = {}
 
-        if not all([hp, dp, ap]):
-            continue
-        if hp <= 1 or dp <= 1 or ap <= 1:
+        odds_full = all([hp, dp, ap])
+        if odds_full and min(hp, dp, ap) <= 1:
             continue
 
-        # Compose engine/tips when available, else simplified Poisson
+        # Compose engine/tips when available, else simplified Poisson.
+        # Partial boards (a leg OFF/missing) still render as model-only cards.
         tip = None
         try:
             tip = _engine_tip(home_name, away_name, home_id, away_id, hp, dp, ap,
                               espn_key, _display_league(league))
         except Exception:
             tip = None
-        if not tip:
+        if not tip and odds_full:
             tip = _simple_tip(hp, dp, ap)
+        if not tip:
+            continue
+        if not odds_full:
+            tip["verdict"] = "NO BET"
+            missing = [k for k, v in
+                       (("Home", hp), ("Draw", dp), ("Away", ap)) if not v]
+            tip["reasons"].append(
+                "Book odds incomplete (" + ", ".join(missing) +
+                " unavailable) — model view only, no edge check")
 
         sources = [
             {"name": "ESPN", "url": f"https://www.espn.com/soccer/scoreboard/_/league/{espn_key}"},
