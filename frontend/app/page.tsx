@@ -9,12 +9,14 @@ export default function Today() {
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
   const [open, setOpen] = useState<string | null>(null);
+  const [updatedAt, setUpdatedAt] = useState<number | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
     setErr("");
     try {
       setGroups(await getTodayMatches());
+      setUpdatedAt(Date.now());
     } catch (e) {
       setErr(e instanceof Error ? e.message : "failed to load matches");
       setGroups([]);
@@ -25,6 +27,8 @@ export default function Today() {
 
   useEffect(() => {
     load();
+    const id = setInterval(load, 15 * 60 * 1000);
+    return () => clearInterval(id);
   }, [load]);
 
   const total = groups.reduce((n, g) => n + g.tips.length, 0);
@@ -39,9 +43,10 @@ export default function Today() {
       <header className="masthead tips-head">
         <div>
           <div className="kicker">Top 5 leagues · updates daily on load</div>
-          <h1 className="title">Today&apos;s Matches</h1>
+          <h1 className="title">Matches</h1>
           <p className="tips-meta">
-            {todayLabel} · {loading ? "loading…" : `${total} match${total === 1 ? "" : "es"} today`}
+            {todayLabel} · {loading ? "loading…" : `${total} match${total === 1 ? "" : "es"} · window`}
+            {updatedAt != null && !loading && ` · updated ${new Date(updatedAt).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}`}
           </p>
         </div>
         <div className="tips-controls">
@@ -57,12 +62,12 @@ export default function Today() {
         </div>
       </header>
 
-      {loading && <div className="empty">Loading today&apos;s matches across top leagues…</div>}
+      {loading && <div className="empty">Loading matches across top leagues…</div>}
       {err && <p className="err">{err}</p>}
 
       {!loading && !err && total === 0 && (
         <div className="empty">
-          No matches with odds today. Check back later — or browse{" "}
+          No matches in the current window. Check back later — or browse{" "}
           <Link className="source-link" href="/tips">
             all tips
           </Link>

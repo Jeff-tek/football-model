@@ -53,10 +53,11 @@ export function OddsRadar({ t }: { t: Tip }) {
 
 export function CrowdBars({ t }: { t: Tip }) {
   if (!t.crowd) return null;
+  const tr = t.crowdTrend ?? null;
   const rows = [
-    { k: "H", m: t.probs["1X2"][0], c: t.crowd.home },
-    { k: "X", m: t.probs["1X2"][1], c: t.crowd.draw },
-    { k: "A", m: t.probs["1X2"][2], c: t.crowd.away },
+    { k: "H", m: t.probs["1X2"][0], c: t.crowd.home, dt: tr?.homeDelta ?? null },
+    { k: "X", m: t.probs["1X2"][1], c: t.crowd.draw, dt: tr?.drawDelta ?? null },
+    { k: "A", m: t.probs["1X2"][2], c: t.crowd.away, dt: tr?.awayDelta ?? null },
   ];
   return (
     <div className="viz-block">
@@ -81,6 +82,14 @@ export function CrowdBars({ t }: { t: Tip }) {
               <span className={`duel-d ${d > 0.005 ? "hot" : d < -0.005 ? "cold" : ""}`}>
                 {d > 0.005 ? `+${(d * 100).toFixed(0)}` : `${(d * 100).toFixed(0)}`}
               </span>
+              {r.dt != null && Math.abs(r.dt) >= 0.005 && (
+                <span
+                  className={`duel-d ${r.dt > 0 ? "hot" : "cold"}`}
+                  title={`Crowd trend since ${tr?.since ? new Date(tr.since).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" }) : "earlier"}`}
+                >
+                  {r.dt > 0 ? `▲${(r.dt * 100).toFixed(0)}` : `▼${(Math.abs(r.dt) * 100).toFixed(0)}`}
+                </span>
+              )}
             </div>
           );
         })}

@@ -39,6 +39,12 @@ export type Tip = {
     low_volume: boolean;
   } | null;
   lineMove: { Home?: string; Draw?: string; Away?: string } | null;
+  crowdTrend?: {
+    homeDelta: number;
+    drawDelta: number;
+    awayDelta: number;
+    since: string;
+  } | null;
   sources: { name: string; url: string }[];
   homeForm: string;
   awayForm: string;

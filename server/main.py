@@ -125,6 +125,17 @@ def form(team_id: str, league: str = "eng.1"):
     return _cached(f"form:{team_id}", lambda: espn_free.fetch_team_schedule(team_id, league))
 
 
+@app.get("/crowd-trend")
+def crowd_trend_endpoint(league: str, home: str, away: str, match_date: str):
+    """Crowd snapshot history + trend for a fixture. Empty when no history/DB."""
+    try:
+        from db import crowd_history, crowd_trend as _trend
+        return {"history": crowd_history(league, home, away, match_date),
+                "trend": _trend(league, home, away, match_date)}
+    except Exception as e:
+        return {"history": [], "trend": None, "error": str(e)}
+
+
 def _poisson_pmf(k, lam):
     from math import exp, factorial
     return exp(-lam) * (lam ** k) / factorial(k)
@@ -323,7 +334,8 @@ def _simple_tip(hp, dp, ap):
             "homeXG": hxg, "awayXG": axg}
 
 
-def _engine_tip(home_name, away_name, home_id, away_id, hp, dp, ap, espn_key, league):
+def _engine_tip(home_name, away_name, home_id, away_id, hp, dp, ap, espn_key, league,
+                crowd_1x2=None):
     """Compose engine/tips.build_tip with form from ESPN schedules + 2nd opinions."""
     from ingest.espn_free import fetch_team_schedule
     from engine.tips import build_tip
@@ -342,7 +354,8 @@ def _engine_tip(home_name, away_name, home_id, away_id, hp, dp, ap, espn_key, le
             "rho": 0.02, "sample": min(hn, an)}
     elo_1x2, om_1x2, tags = _second_opinions(league, home_name, away_name)
     tip = build_tip(form, {"home": hp, "draw": dp, "away": ap},
-                    elo_1x2=elo_1x2, openmodel_1x2=om_1x2)
+                    elo_1x2=elo_1x2, openmodel_1x2=om_1x2,
+                    crowd_1x2=crowd_1x2)
     p = tip["probs"]
     return {"probs": {"1X2": [p["1X2"]["home"], p["1X2"]["draw"], p["1X2"]["away"]],
                       "DC": [p["DC"]["1X"], p["DC"]["12"], p["DC"]["X2"]],
@@ -397,6 +410,7 @@ def tips(league: str = "La Liga"):
             home_form = ev.get("home_form", "")
             away_form = ev.get("away_form", "")
             open_odds = (ev.get("odds") or {}).get("open") or {}
+            match_state = ev.get("state", "pre")
         else:
             # Raw ESPN format: competitions[0].competitors + odds
             comps = ev.get("competitions", [{}])
@@ -426,19 +440,40 @@ def tips(league: str = "La Liga"):
             home_form = home_c.get("form", "") or ""
             away_form = away_c.get("form", "") or ""
             open_odds = {}
+            match_state = ((comp.get("status") or {}).get("type") or {}).get("state", "pre")
 
         odds_full = all([hp, dp, ap])
-        if not _is_today(match_date):
+        if match_state == "post":
             continue
         if odds_full and min(hp, dp, ap) <= 1:
             continue
+
+        # Crowd first: votes in the ensemble (~12%, skipped when thin),
+        # persisted per call (throttled 30min) for matchday intensity trends.
+        # Cache key includes kickoff date so matchdays never read stale sentiment.
+        crowd = None
+        try:
+            from ingest.polymarket_free import crowd_lookup
+            crowd = _cached(f"crowd:{home_name}|{away_name}|{match_date}",
+                            lambda: crowd_lookup(home_name, away_name, match_date))
+        except Exception:
+            crowd = None
+        crowd_1x2 = None
+        if crowd and not crowd.get("low_volume"):
+            try:
+                crowd_1x2 = {"home": float(crowd["home"]),
+                             "draw": float(crowd["draw"]),
+                             "away": float(crowd["away"])}
+            except (KeyError, TypeError, ValueError):
+                crowd_1x2 = None
 
         # Compose engine/tips when available, else simplified Poisson.
         # Partial boards (a leg OFF/missing) still render as model-only cards.
         tip = None
         try:
             tip = _engine_tip(home_name, away_name, home_id, away_id, hp, dp, ap,
-                              espn_key, _display_league(league))
+                              espn_key, _display_league(league),
+                              crowd_1x2=crowd_1x2)
         except Exception:
             tip = None
         if not tip and odds_full:
@@ -462,14 +497,16 @@ def tips(league: str = "La Liga"):
         if tip.get("tags"):
             sources.append({"name": "The Open Model", "url": "https://theopenmodel.com"})
 
-        # Crowd (Polymarket public money) — display only, never feeds the pick
-        crowd = None
+        # Snapshot crowd for intraday trend (best-effort, never breaks tips)
+        crowd_trend = None
         try:
-            from ingest.polymarket_free import crowd_lookup
-            crowd = _cached(f"crowd:{home_name}|{away_name}",
-                            lambda: crowd_lookup(home_name, away_name, match_date))
+            from db import record_crowd_snapshot, crowd_trend as _trend
+            record_crowd_snapshot(_display_league(league), home_name,
+                                  away_name, match_date, crowd)
+            crowd_trend = _trend(_display_league(league), home_name,
+                                 away_name, match_date)
         except Exception:
-            crowd = None
+            crowd_trend = None
 
         # Line movement (DraftKings open → close, decimal) — display only
         line_move = None
@@ -515,6 +552,7 @@ def tips(league: str = "La Liga"):
             "confidence": tip["confidence"],
             "models": tip.get("models", []),
             "crowd": crowd,
+            "crowdTrend": crowd_trend,
             "lineMove": line_move,
             "sources": sources,
             "homeForm": home_form, "awayForm": away_form,
@@ -524,6 +562,7 @@ def tips(league: str = "La Liga"):
                          "away": _team_meta(smap.get(away_name.lower()))},
         })
 
+    tips_list.sort(key=lambda t: t.get("date") or "")
     return {"league": league, "as_of": datetime.now(timezone.utc).isoformat(),
             "ttl": 180, "cron": "vercel.json: /api/ingest 0 6 * * *",
             "tips": tips_list}

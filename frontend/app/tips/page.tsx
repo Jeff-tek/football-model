@@ -13,6 +13,7 @@ export default function TipsPage() {
   const [seq, setSeq] = useState(0);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
+  const [updatedAt, setUpdatedAt] = useState<number | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true); setErr("");
@@ -29,11 +30,16 @@ export default function TipsPage() {
     });
     setBoards(next);
     setSeq((s) => s + 1);
+    setUpdatedAt(Date.now());
     if (failed.length > 0) setErr(`couldn't load: ${failed.join(", ")}`);
     setLoading(false);
   }, []);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    load();
+    const id = setInterval(load, 15 * 60 * 1000);
+    return () => clearInterval(id);
+  }, [load]);
 
   const data = boards[league] ?? null;
   const total = Object.values(boards).reduce((s, b) => s + b.tips.length, 0);
@@ -43,7 +49,7 @@ export default function TipsPage() {
       <header className="masthead tips-head">
         <div>
           <div className="kicker">Free auto-pull · Poisson + Elo + Open Model ensemble</div>
-          <h1 className="title">Today&apos;s Tips</h1>
+          <h1 className="title">Tips</h1>
         </div>
         <div className="tips-controls">
           <button className="refresh" onClick={load} disabled={loading}>
@@ -71,6 +77,7 @@ export default function TipsPage() {
         <p className="tips-meta">
           {data.league} · as of {fmtDate(data.as_of)} · cached {data.ttl}s · daily cron {data.cron.split(": ")[1]}
           {total > 0 && ` · ${total} tips across leagues`}
+          {updatedAt != null && !loading && ` · updated ${new Date(updatedAt).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}`}
         </p>
       )}
       <PnLBar refreshKey={String(seq)} />

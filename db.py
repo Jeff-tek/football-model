@@ -151,6 +151,25 @@ def init_db():
     Base.metadata.create_all(engine)
 
 
+class CrowdSnapshot(Base):
+    """Append-only Polymarket crowd history per fixture (matchday intensity trend)."""
+    __tablename__ = "crowd_snapshots"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    league: Mapped[str] = mapped_column(String, nullable=False)
+    home_team: Mapped[str] = mapped_column(String, nullable=False)
+    away_team: Mapped[str] = mapped_column(String, nullable=False)
+    match_date: Mapped[str] = mapped_column(String, nullable=False)
+    home: Mapped[float | None] = mapped_column(Float)
+    draw: Mapped[float | None] = mapped_column(Float)
+    away: Mapped[float | None] = mapped_column(Float)
+    low_volume: Mapped[bool] = mapped_column(Boolean, default=False)
+    snapshot_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    __table_args__ = (
+        Index("ix_crowd_fixture_time", "league", "home_team", "away_team",
+              "match_date", "snapshot_at"),
+    )
+
+
 def reset_odds_table():
     """Drop and recreate the odds table (safe when empty)."""
     Odds.__table__.drop(engine)
@@ -242,3 +261,58 @@ def opponent_form_as_of(team_id, as_of_date, last_n=5):
     xgas = [m.xg_against for m in rows if m.xg_against is not None]
     return {"form": form, "xga_trend": (sum(xgas) / len(xgas)) if xgas else None,
             "n": len(rows)}
+
+
+SNAPSHOT_THROTTLE_S = 30 * 60  # max 1 snapshot per fixture per 30 min
+
+
+def record_crowd_snapshot(league, home, away, match_date, crowd):
+    """Append crowd snapshot; skip when latest is <30min old. Returns bool recorded."""
+    if not crowd:
+        return False
+    with SessionLocal() as s:
+        latest = (s.query(CrowdSnapshot)
+                  .filter_by(league=league, home_team=home,
+                             away_team=away, match_date=match_date)
+                  .order_by(CrowdSnapshot.snapshot_at.desc()).first())
+        if latest and latest.snapshot_at:
+            snap_at = latest.snapshot_at
+            if snap_at.tzinfo is None:
+                snap_at = snap_at.replace(tzinfo=timezone.utc)
+            if (_now() - snap_at).total_seconds() < SNAPSHOT_THROTTLE_S:
+                return False
+        s.add(CrowdSnapshot(league=league, home_team=home, away_team=away,
+                            match_date=match_date, home=crowd.get("home"),
+                            draw=crowd.get("draw"), away=crowd.get("away"),
+                            low_volume=bool(crowd.get("low_volume"))))
+        s.commit()
+        return True
+
+
+def crowd_history(league, home, away, match_date, limit=20):
+    """Oldest→newest snapshots for a fixture."""
+    with SessionLocal() as s:
+        rows = (s.query(CrowdSnapshot)
+                .filter_by(league=league, home_team=home,
+                           away_team=away, match_date=match_date)
+                .order_by(CrowdSnapshot.snapshot_at.asc())
+                .limit(limit).all())
+        return [{"home": r.home, "draw": r.draw, "away": r.away,
+                 "low_volume": r.low_volume,
+                 "at": r.snapshot_at.isoformat() if r.snapshot_at else ""}
+                for r in rows]
+
+
+def crowd_trend(league, home, away, match_date):
+    """{homeDelta, drawDelta, awayDelta, since} last-minus-first; None when <2."""
+    hist = crowd_history(league, home, away, match_date)
+    if len(hist) < 2:
+        return None
+    first, last = hist[0], hist[-1]
+    try:
+        return {"homeDelta": round(last["home"] - first["home"], 4),
+                "drawDelta": round(last["draw"] - first["draw"], 4),
+                "awayDelta": round(last["away"] - first["away"], 4),
+                "since": first["at"]}
+    except TypeError:
+        return None
