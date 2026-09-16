@@ -12,6 +12,7 @@ Goal: `/` + `/tips` show ESPN's current scoreboard window (sorted by date, date 
 - Secondary: double date filter (backend UTC day + frontend local day) can disagree by a day on evening KOs. This revamp removes the frontend day filter; backend returns window.
 - Partial-board note: `_odds()` needs all 3 legs for full board; `_engine_tip` tolerates None odds (build_tip skips None), so partials render as model-only NO BET via existing path. Kept as-is.
 - Verified 2026-09-16: `py_compile` OK; live ESPN window-pre counts EPL 1 / La Liga 0 / Serie A 1 / Bundesliga 1 / Ligue 1 1 (all 09-18). `_is_today` helper left unused in server/main.py.
+- Fix 2026-09-16b: ESPN default window lags on matchdays (esp.1 served only 09-15 FTs while 4 real 09-16 fixtures existed). `fetch_scoreboard` now merges default window + explicit `?dates=today` (UTC), deduped by event id. Live check: esp.1 7 total / 4 pre.
 
 ## Changed files
 - (pending) `server/main.py` — drop today gate, skip `post`, sort tips by date
