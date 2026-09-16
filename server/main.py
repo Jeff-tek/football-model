@@ -17,6 +17,15 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
+@app.on_event("startup")
+def _ensure_tables():
+    try:
+        from db import init_db
+        init_db()
+    except Exception:
+        pass
+
 SEASON = os.environ.get("CURRENT_SEASON_FBREF", "2025-2026")
 CRON_SECRET = os.environ.get("CRON_SECRET", "")
 LEAGUE_SLUGS = {"EPL": "Premier League", "La_liga": "La Liga", "Serie_A": "Serie A",

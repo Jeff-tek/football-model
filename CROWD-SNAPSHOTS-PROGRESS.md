@@ -14,6 +14,7 @@ Goal: daily refresh guaranteed + matchday-intense crowd (snapshots 3x/day, trend
 - Prior state: Vercel cron `/api/ingest` 6am daily only; in-memory caches (120s tips, 600s polymarket) wiped on cold start; crowd display-only (never moved pick).
 - Design: /tips persists crowd snapshot (throttled: skip if latest <30min) → history per fixture → trend = last minus first. Crowd votes in ensemble at 0.12 weight, skipped when low_volume.
 - Secrets needed for workflow: PROD_URL (e.g. https://<app>.vercel.app), CRON_SECRET only if backend sets it (currently open).
+- `server/main.py` startup hook calls `init_db()` (best-effort) — Vercel deploy auto-creates `crowd_snapshots`, no manual step.
 
 ## Changed files
 - (pending) `db.py`, `engine/tips.py`, `server/main.py`
